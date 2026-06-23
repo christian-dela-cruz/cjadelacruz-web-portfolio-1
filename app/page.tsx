@@ -137,7 +137,7 @@ interface Project {
 
 const projects: Project[] = [
   {
-    title: "HOPFOG: Multi-Hop Messaging and Communication Application",
+    title: "HOPFOG: Multi-Hop Messaging and Communication Application (Mobile)",
     description:
       "A community-based communication solution designed for low-connectivity or disaster-prone environments. Leverages fog computing concepts and a multi-hop mesh architecture.",
     bullets: [
@@ -147,8 +147,9 @@ const projects: Project[] = [
     ],
     tech: ["IEEE 802.15.4", "Fog Computing", "Mobile", "Networking", "Kotlin", "Android"],
     duration: "September 2025 – April 2026",
-    github: "#",
+    github: "https://github.com/christian-dela-cruz/HopFogMobile.git",
     status: "completed",
+    screenshots: ["/projects/hopfog1.png", "/projects/hopfog2.png"],
   },
   {
     title: "EliteFitness Mobile Application",
@@ -175,6 +176,7 @@ const projects: Project[] = [
     tech: ["Kotlin", "Jetpack Compose", "Material Design 3", "Ktor Client", "Gradle"],
     github: "https://github.com/christian-dela-cruz/MaluPET",
     status: "completed",
+    screenshots: ["/projects/malupet1.png"],
   },
   {
     title: "Darwin's Game",
@@ -188,7 +190,7 @@ const projects: Project[] = [
     tech: ["C#", "Windows Forms", ".NET"],
     github: "https://github.com/christian-dela-cruz/Darwins-Game",
     status: "completed",
-    screenshots: ["/darwin1.jpeg", "/darwin2.jpeg"],
+    screenshots: ["/projects/darwin1.jpeg", "/projects/darwin2.jpeg"],
   },
   {
     title: "Crossroads Coffee House",
@@ -202,7 +204,7 @@ const projects: Project[] = [
     tech: ["UI/UX", "Figma", "SDLC"],
     github: "https://github.com/christian-dela-cruz/Crossroads-Coffee-House",
     status: "completed",
-    screenshots: ["/crossroad1.png", "/crossroad2.png"],
+    screenshots: ["/projects/crossroad1.png", "/projects/crossroad2.png"],
   },
   {
     title: "TollGate Web AppLication",
@@ -229,7 +231,7 @@ const projects: Project[] = [
     tech: ["Python", "Cryptography", "Algorithms"],
     github: "https://github.com/christian-dela-cruz/TriHex-Cipher",
     status: "completed",
-    screenshots: ["/trihex1.jpeg", "/trihex2.jpeg"],
+    screenshots: ["/projects/trihex1.jpeg", "/projects/trihex2.jpeg"],
   },
 ];
 
