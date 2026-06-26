@@ -471,9 +471,9 @@ export default function AdminPage() {
         </div>
       </header>
 
-      <div className="flex-1 flex flex-col md:flex-row">
+      <div className="flex-1 flex flex-col md:flex-row items-stretch">
         {/* Navigation Sidebar */}
-        <aside className="w-full md:w-64 bg-[var(--card-bg)]/20 border-r border-[var(--card-border)] p-4 flex flex-row md:flex-col justify-between md:justify-start gap-4 overflow-x-auto md:overflow-x-visible">
+        <aside className="w-full md:w-64 bg-[var(--card-bg)]/20 border-r border-[var(--card-border)] p-4 flex flex-row md:flex-col justify-between md:justify-start gap-4 overflow-x-auto md:overflow-x-visible md:sticky md:top-[73px] md:h-[calc(100vh-73px)]">
           {/* Sidebar Nav Tabs */}
           <div className="flex flex-row md:flex-col gap-2 flex-1">
             {(

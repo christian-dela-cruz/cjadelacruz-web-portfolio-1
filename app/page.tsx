@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, Suspense, lazy } from "react";
 import {
   FaGithub,
   FaLinkedin,
@@ -28,6 +28,10 @@ import {
 import { SiCredly } from "react-icons/si";
 import { HiChip, HiCalendar } from "react-icons/hi";
 import { supabase } from "@/lib/supabase";
+
+const Dithering = lazy(() =>
+  import("@paper-design/shaders-react").then((mod) => ({ default: mod.Dithering }))
+);
 
 // ─── Data ────────────────────────────────────────────────────────────────────
 
@@ -335,6 +339,7 @@ export default function HomePage() {
   const [selectedSeminar, setSelectedSeminar] = useState<(typeof initialSeminars)[number] | null>(null);
   const [slideshowIdx, setSlideshowIdx] = useState(0);
   const slideshowIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [isHeroHovered, setIsHeroHovered] = useState(false);
 
   // Fetch data dynamically from Supabase if environment variables are available
   useEffect(() => {
@@ -463,9 +468,26 @@ export default function HomePage() {
       {/* ── HERO ──────────────────────────────────────────────────────────── */}
       <section
         id="home"
-        className="min-h-screen flex items-center justify-center px-6 py-20 scroll-mt-16"
+        className="min-h-screen flex items-center justify-center px-6 py-20 scroll-mt-16 relative overflow-hidden"
+        onMouseEnter={() => setIsHeroHovered(true)}
+        onMouseLeave={() => setIsHeroHovered(false)}
       >
-        <div className="max-w-6xl w-full mx-auto">
+        {/* WebGL Shader Dithering Background */}
+        <div className="absolute inset-0 z-0 pointer-events-none opacity-25 dark:opacity-20 mix-blend-normal transition-opacity duration-500">
+          <Suspense fallback={<div className="absolute inset-0 bg-transparent" />}>
+            <Dithering
+              colorBack="#00000000" // Transparent background
+              colorFront="#FF7F50"  // Accent Coral color
+              shape="warp"
+              type="4x4"
+              speed={isHeroHovered ? 0.5 : 0.15}
+              className="size-full"
+              minPixelRatio={1}
+            />
+          </Suspense>
+        </div>
+
+        <div className="max-w-6xl w-full mx-auto relative z-10">
           <div className="flex flex-col-reverse lg:flex-row items-center gap-16">
             {/* Text */}
             <div className="flex-1 text-center lg:text-left">
