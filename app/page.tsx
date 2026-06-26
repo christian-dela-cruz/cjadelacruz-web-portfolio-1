@@ -27,6 +27,7 @@ import {
 } from "react-icons/fa";
 import { SiCredly } from "react-icons/si";
 import { HiChip, HiCalendar } from "react-icons/hi";
+import { supabase } from "@/lib/supabase";
 
 // ─── Data ────────────────────────────────────────────────────────────────────
 
@@ -53,7 +54,7 @@ const socialLinks = [
   },
 ];
 
-const skills: Record<string, string[]> = {
+const initialSkills: Record<string, string[]> = {
   Programming: ["Python", "C#", "Kotlin", "HTML", "TypeScript", "ASP.NET MVC"],
   Networking: [
     "Routing & Switching",
@@ -82,7 +83,7 @@ const skills: Record<string, string[]> = {
   ],
 };
 
-const certifications = [
+const initialCertifications = [
   {
     name: "CompTIA Tech+",
     issuer: "CompTIA",
@@ -135,7 +136,7 @@ interface Project {
   screenshots?: string[];
 }
 
-const projects: Project[] = [
+const initialProjects: Project[] = [
   {
     title: "HOPFOG: Multi-Hop Messaging and Communication Application (Mobile)",
     description:
@@ -256,7 +257,7 @@ const statusConfig = {
   },
 };
 
-const seminars = [
+const initialSeminars = [
   {
     title: "Pathways to Employability: Career Readiness Toolkit",
     organizer: "Mapúa Malayan Colleges Laguna & Arizona State University",
@@ -314,12 +315,96 @@ const accentBgMd = "rgba(6,182,212,0.15)";
 
 export default function HomePage() {
   const certScrollRef = useRef<HTMLDivElement>(null);
+  
+  // Dynamic State variables shadow the module-scope initial seed data
+  const [skills, setSkills] = useState<Record<string, string[]>>(initialSkills);
+  const [certifications, setCertifications] = useState(initialCertifications);
+  const [projects, setProjects] = useState(initialProjects);
+  const [seminars, setSeminars] = useState(initialSeminars);
+
   const [hoveredProject, setHoveredProject] = useState<number | null>(null);
   const [hoveredEntry, setHoveredEntry] = useState<string | null>(null);
   const [projectPage, setProjectPage] = useState(0);
-  const [selectedSeminar, setSelectedSeminar] = useState<(typeof seminars)[number] | null>(null);
+  const [selectedSeminar, setSelectedSeminar] = useState<(typeof initialSeminars)[number] | null>(null);
   const [slideshowIdx, setSlideshowIdx] = useState(0);
   const slideshowIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Fetch data dynamically from Supabase if environment variables are available
+  useEffect(() => {
+    const loadSupabaseData = async () => {
+      try {
+        // Fetch skills
+        const { data: skillsData } = await supabase
+          .from("skills")
+          .select("*")
+          .order("category", { ascending: true });
+        if (skillsData && skillsData.length > 0) {
+          const skillsObj: Record<string, string[]> = {};
+          skillsData.forEach((s: any) => {
+            skillsObj[s.category] = s.items;
+          });
+          setSkills(skillsObj);
+        }
+
+        // Fetch certifications
+        const { data: certsData } = await supabase
+          .from("certifications")
+          .select("*")
+          .order("created_at", { ascending: false });
+        if (certsData && certsData.length > 0) {
+          setCertifications(
+            certsData.map((c: any) => ({
+              name: c.name,
+              issuer: c.issuer,
+              date: c.date,
+              badge: c.badge_url || "/placeholder.png",
+              credlyUrl: c.credly_url,
+            }))
+          );
+        }
+
+        // Fetch projects
+        const { data: projsData } = await supabase
+          .from("projects")
+          .select("*")
+          .order("created_at", { ascending: false });
+        if (projsData && projsData.length > 0) {
+          setProjects(
+            projsData.map((p: any) => ({
+              title: p.title,
+              description: p.description,
+              bullets: p.bullets || [],
+              tech: p.tech || [],
+              duration: p.duration,
+              github: p.github,
+              status: p.status,
+              screenshots: p.screenshots || [],
+            }))
+          );
+        }
+
+        // Fetch seminars
+        const { data: semsData } = await supabase
+          .from("seminars")
+          .select("*")
+          .order("created_at", { ascending: false });
+        if (semsData && semsData.length > 0) {
+          setSeminars(
+            semsData.map((s: any) => ({
+              title: s.title,
+              organizer: s.organizer,
+              date: s.date,
+              image: s.image_url || "/placeholder.png",
+            }))
+          );
+        }
+      } catch (err) {
+        console.warn("Failed to load live data from Supabase, using local defaults:", err);
+      }
+    };
+
+    loadSupabaseData();
+  }, []);
 
   const startSlideshow = (screenshots: string[]) => {
     setSlideshowIdx(0);
