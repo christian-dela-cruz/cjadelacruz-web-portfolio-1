@@ -101,6 +101,7 @@ CREATE TABLE IF NOT EXISTS public.profile (
   description TEXT NOT NULL DEFAULT 'Full-stack developer with expertise in mobile app development, networking, and cloud infrastructure. Passionate about building secure, scalable, and user-centric solutions.',
   profile_image_url TEXT DEFAULT '/Formal_Picture.jpg',
   resume_url TEXT DEFAULT '/resume.pdf',
+  logo_image_url TEXT DEFAULT '/favicon.png',
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -112,14 +113,15 @@ CREATE POLICY "Allow public read access on profile" ON public.profile FOR SELECT
 CREATE POLICY "Allow auth write access on profile" ON public.profile FOR ALL TO authenticated USING (true);
 
 -- Insert original mock profile data
-INSERT INTO public.profile (id, name, title, description, profile_image_url, resume_url)
+INSERT INTO public.profile (id, name, title, description, profile_image_url, resume_url, logo_image_url)
 VALUES (
   '00000000-0000-0000-0000-000000000000',
   'Christian Dela Cruz',
   'Information Technology & Cybersecurity Specialist',
   'Full-stack developer with expertise in mobile app development, networking, and cloud infrastructure. Passionate about building secure, scalable, and user-centric solutions.',
   '/Formal_Picture.jpg',
-  '/resume.pdf'
+  '/resume.pdf',
+  '/favicon.png'
 )
 ON CONFLICT (id) DO NOTHING;
 

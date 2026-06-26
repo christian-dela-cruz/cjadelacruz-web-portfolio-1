@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
+import { supabase } from "@/lib/supabase";
 
 export const metadata: Metadata = {
   title: "Christian Dela Cruz | IT",
@@ -11,16 +12,26 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  let logoImageUrl = "/favicon.png";
+  try {
+    const { data } = await supabase.from("profile").select("logo_image_url").maybeSingle();
+    if (data?.logo_image_url) {
+      logoImageUrl = data.logo_image_url;
+    }
+  } catch (e) {
+    console.warn("Supabase fetch logo failed in layout:", e);
+  }
+
   return (
     <html lang="en" className="h-full antialiased">
       <body className="min-h-full flex flex-col">
-        <Navbar />
-        <main className="flex-1 pt-16">{children}</main>
+        <Navbar logoImageUrl={logoImageUrl} />
+        <main className="flex-1">{children}</main>
       </body>
     </html>
   );

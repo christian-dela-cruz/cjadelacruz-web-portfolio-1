@@ -110,6 +110,7 @@ export default function AdminPage() {
   const [profDesc, setProfDesc] = useState("");
   const [profImageUrl, setProfImageUrl] = useState("");
   const [profResumeUrl, setProfResumeUrl] = useState("");
+  const [profLogoImageUrl, setProfLogoImageUrl] = useState("");
   const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   // Editor Modal States
@@ -149,6 +150,7 @@ export default function AdminPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const profileImageInputRef = useRef<HTMLInputElement>(null);
   const resumeInputRef = useRef<HTMLInputElement>(null);
+  const logoImageInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
 
   // Initialize theme and check session
@@ -207,6 +209,7 @@ export default function AdminPage() {
         setProfDesc(profRes.data.description || "");
         setProfImageUrl(profRes.data.profile_image_url || "");
         setProfResumeUrl(profRes.data.resume_url || "");
+        setProfLogoImageUrl(profRes.data.logo_image_url || "");
       }
     } catch (err) {
       console.error("Error fetching data:", err);
@@ -394,6 +397,7 @@ export default function AdminPage() {
         description: profDesc,
         profile_image_url: profImageUrl,
         resume_url: profResumeUrl,
+        logo_image_url: profLogoImageUrl,
         updated_at: new Date().toISOString(),
       });
 
@@ -401,7 +405,11 @@ export default function AdminPage() {
       alert("Profile and Hero section updated successfully!");
       fetchData();
     } catch (err: any) {
-      alert("Profile update failed: " + err.message);
+      let errorMsg = err.message || "Failed to save profile";
+      if (err.message && err.message.includes("column") && err.message.includes("logo_image_url")) {
+        errorMsg += "\n\nIt seems the 'logo_image_url' column is missing from your profile table. Please run the SQL command provided in the setup alert box on this page within your Supabase SQL Editor.";
+      }
+      alert("Profile update failed: " + errorMsg);
     } finally {
       setIsSavingProfile(false);
     }
@@ -833,6 +841,60 @@ export default function AdminPage() {
                         accept="application/pdf"
                         onChange={(e) => handleImageUpload(e, setProfResumeUrl)}
                       />
+                    </div>
+
+                    {/* Navbar Logo Image Upload */}
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider block">Navbar Logo / Icon Image</label>
+                      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+                        <div className="relative w-16 h-16 rounded-xl overflow-hidden border border-[var(--card-border)] bg-[var(--background)] flex-shrink-0 flex items-center justify-center p-2">
+                          {profLogoImageUrl ? (
+                            <img src={profLogoImageUrl} alt="Logo Preview" className="w-full h-full object-contain" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-xs text-[var(--muted)]">No Logo</div>
+                          )}
+                        </div>
+                        
+                        <div className="flex-1 w-full space-y-2">
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              placeholder="Paste logo image URL or upload a file"
+                              value={profLogoImageUrl}
+                              onChange={(e) => setProfLogoImageUrl(e.target.value)}
+                              className="flex-1 bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => logoImageInputRef.current?.click()}
+                              disabled={isUploading}
+                              className="bg-[var(--card-bg)] hover:bg-[var(--card-border)] border border-[var(--card-border)] px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2 cursor-pointer disabled:opacity-50 text-[var(--foreground)]"
+                            >
+                              {isUploading ? <FaSpinner className="animate-spin" /> : <FaUpload />} Upload
+                            </button>
+                          </div>
+                          <input
+                            type="file"
+                            ref={logoImageInputRef}
+                            className="hidden"
+                            accept="image/*"
+                            onChange={(e) => handleImageUpload(e, setProfLogoImageUrl)}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Database migration warning */}
+                    <div className="p-4 rounded-xl border border-yellow-500/20 bg-yellow-500/5 text-yellow-600 dark:text-yellow-400 text-xs leading-relaxed space-y-1.5">
+                      <p className="font-semibold flex items-center gap-1.5">
+                        <FaInfoCircle /> First-Time Setup: Database Action Required
+                      </p>
+                      <p>
+                        If your Supabase database was created before this update, you must add the new <code>logo_image_url</code> column to your <code>profile</code> table. Run this command in your Supabase SQL Editor:
+                      </p>
+                      <pre className="bg-black/40 p-2 rounded-lg font-mono select-all overflow-x-auto text-[10px] text-left">
+                        ALTER TABLE public.profile ADD COLUMN IF NOT EXISTS logo_image_url TEXT DEFAULT &apos;/favicon.png&apos;;
+                      </pre>
                     </div>
 
                     <div className="flex justify-end pt-4 border-t border-[var(--card-border)]">
