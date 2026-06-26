@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, lazy, Suspense, Component } from "react";
 import { supabase } from "@/lib/supabase";
 import {
   FaFolder,
@@ -21,13 +21,64 @@ import {
   FaSun,
   FaMoon,
   FaEye,
+  FaEyeSlash,
   FaInfoCircle,
   FaChevronUp,
 } from "react-icons/fa";
 
+import { detectWebGL } from "@/lib/webgl";
+import { ShaderFallback } from "@/components/ShaderFallback";
+
+const Dithering = typeof window !== "undefined" && detectWebGL()
+  ? lazy(() => import("@paper-design/shaders-react").then((mod) => ({ default: mod.Dithering })))
+  : () => <div className="absolute inset-0 bg-transparent" />;
+
+class ShaderErrorBoundary extends Component<{ children: React.ReactNode }, { hasError: boolean }> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: any) {
+    console.warn("Shader WebGL error caught:", error);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return <div className="absolute inset-0 bg-transparent" />;
+    }
+    return this.props.children;
+  }
+}
+
 type Tab = "projects" | "certifications" | "seminars" | "skills" | "profile";
 
 export default function AdminPage() {
+  const [shaderError, setShaderError] = useState(false);
+  const [isWebGLSupported, setIsWebGLSupported] = useState(false);
+
+  useEffect(() => {
+    setIsWebGLSupported(detectWebGL());
+
+    const handleRejection = (event: PromiseRejectionEvent) => {
+      if (
+        event.reason &&
+        event.reason.message &&
+        (event.reason.message.includes("Paper Shaders") || event.reason.message.includes("WebGL"))
+      ) {
+        event.preventDefault();
+        setShaderError(true);
+      }
+    };
+
+    window.addEventListener("unhandledrejection", handleRejection);
+    return () => window.removeEventListener("unhandledrejection", handleRejection);
+  }, []);
+
   const [session, setSession] = useState<any>(null);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
 
@@ -40,6 +91,8 @@ export default function AdminPage() {
   const [authError, setAuthError] = useState("");
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoginHovered, setIsLoginHovered] = useState(false);
 
   // Active Tab
   const [activeTab, setActiveTab] = useState<Tab>("projects");
@@ -365,68 +418,148 @@ export default function AdminPage() {
   // LOGIN SCREEN
   if (!session) {
     return (
-      <div className="admin-page min-h-screen flex items-center justify-center bg-[#1c141d] px-6">
-        <div className="max-w-md w-full bg-[#2a2a2a] border border-[#404040] rounded-2xl p-8 shadow-2xl">
-          <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-[rgba(255,127,80,0.1)] border border-[rgba(255,127,80,0.2)] rounded-full flex items-center justify-center mx-auto mb-4">
-              <FaLock className="text-2xl text-[#FF7F50]" />
+      <div className="admin-page min-h-screen flex flex-col md:flex-row bg-[var(--background)] text-[var(--foreground)] transition-colors duration-300 relative pulsing-gradient-bg">
+        {/* Floating Theme Toggle */}
+        <button
+          onClick={toggleTheme}
+          className="absolute top-6 right-6 p-2.5 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)]/80 backdrop-blur-sm transition-all hover:scale-105 active:scale-95 cursor-pointer flex items-center justify-center w-10 h-10 z-20 text-[var(--foreground)] shadow-md"
+          aria-label="Toggle theme"
+        >
+          {theme === "dark" ? <FaSun size={15} className="text-[#FF7F50]" /> : <FaMoon size={15} />}
+        </button>
+
+        {/* Left column: form */}
+        <section className="flex-1 flex items-center justify-center p-8 z-10">
+          <div className="max-w-md w-full">
+            <div className="flex flex-col gap-6">
+              <div>
+                <h1 className="text-3xl sm:text-4xl font-black uppercase tracking-wider text-[var(--foreground)]">
+                  Admin <span className="text-[#FF7F50]">Access</span>
+                </h1>
+                <p className="text-[var(--muted)] text-sm mt-1">Sign in to manage your portfolio</p>
+              </div>
+
+              <form onSubmit={handleLogin} className="space-y-6">
+                {authError && (
+                  <div className="p-4 bg-red-950/40 border border-red-500/30 rounded-xl text-red-200 text-sm text-center">
+                    {authError}
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-[var(--muted)] tracking-wider uppercase">Email Address</label>
+                  <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)]/20 backdrop-blur-sm transition-all focus-within:border-[#FF7F50] focus-within:bg-[rgba(255,127,80,0.05)] relative flex items-center">
+                    <FaEnvelope className="absolute left-4 text-[var(--muted)] pointer-events-none" />
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="w-full bg-transparent text-sm py-4 pl-12 pr-4 text-[var(--foreground)] focus:outline-none"
+                      placeholder="admin@example.com"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-[var(--muted)] tracking-wider uppercase">Password</label>
+                  <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)]/20 backdrop-blur-sm transition-all focus-within:border-[#FF7F50] focus-within:bg-[rgba(255,127,80,0.05)] relative flex items-center">
+                    <FaLock className="absolute left-4 text-[var(--muted)] pointer-events-none" />
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full bg-transparent text-sm py-4 pl-12 pr-12 text-[var(--foreground)] focus:outline-none"
+                      placeholder="••••••••"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-4 text-[var(--muted)] hover:text-[#FF7F50] transition-colors focus:outline-none cursor-pointer"
+                      title={showPassword ? "Hide password" : "Show password"}
+                    >
+                      {showPassword ? <FaEyeSlash size={16} /> : <FaEye size={16} />}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isLoggingIn}
+                  className="w-full bg-[#FF7F50] hover:bg-[#ff6a35] text-white font-bold py-4 rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer shadow-lg shadow-[#FF7F50]/20"
+                >
+                  {isLoggingIn ? (
+                    <>
+                      <FaSpinner className="animate-spin text-lg" /> Verifying...
+                    </>
+                  ) : (
+                    "Authorize Session"
+                  )}
+                </button>
+              </form>
             </div>
-            <h1 className="text-2xl font-bold text-white">Admin Portal</h1>
-            <p className="text-[#b0b0b0] text-sm mt-1">Sign in to manage your portfolio</p>
+          </div>
+        </section>
+
+        {/* Right column: visual section */}
+        <section
+          className="hidden md:flex md:w-1/2 relative bg-[var(--background)] overflow-hidden items-center justify-center border-l border-[var(--card-border)] transition-colors duration-300 admin-visual-gradient"
+          onMouseEnter={() => setIsLoginHovered(true)}
+          onMouseLeave={() => setIsLoginHovered(false)}
+        >
+          <div className="absolute inset-0 z-0 pointer-events-none opacity-30 dark:opacity-20 mix-blend-normal transition-opacity duration-500">
+            {!shaderError && isWebGLSupported ? (
+              <ShaderErrorBoundary>
+                <Suspense fallback={<div className="absolute inset-0 bg-transparent" />}>
+                  <Dithering
+                    colorBack="#00000000" // Transparent
+                    colorFront="#FF7F50"  // Coral
+                    shape="warp"
+                    type="4x4"
+                    speed={isLoginHovered ? 0.45 : 0.12}
+                    className="size-full"
+                    minPixelRatio={1}
+                  />
+                </Suspense>
+              </ShaderErrorBoundary>
+            ) : (
+              <ShaderFallback color="#FF7F50" speed={isLoginHovered ? 0.45 : 0.12} />
+            )}
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-6">
-            {authError && (
-              <div className="p-4 bg-red-900/30 border border-red-500/50 rounded-xl text-red-200 text-sm text-center">
-                {authError}
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-[#b0b0b0] tracking-wider uppercase">Email Address</label>
-              <div className="relative">
-                <FaEnvelope className="absolute left-4 top-1/2 -translate-y-1/2 text-[#b0b0b0]" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-[#1c141d] border border-[#404040] rounded-xl py-3 pl-12 pr-4 text-white focus:outline-none focus:border-[#FF7F50] transition-colors"
-                  placeholder="admin@example.com"
-                  required
-                />
-              </div>
+          {/* Premium Glassmorphic Overlay Badge */}
+          <div className="relative z-10 max-w-sm w-full mx-6 p-8 rounded-3xl bg-[var(--card-bg)]/40 backdrop-blur-xl border border-[var(--card-border)] shadow-2xl flex flex-col items-center text-center text-[var(--foreground)] transition-colors duration-300">
+            {/* Pulsing secure badge */}
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[rgba(255,127,80,0.1)] border border-[rgba(255,127,80,0.2)] text-[10px] font-black tracking-widest text-[#FF7F50] uppercase mb-6 animate-pulse">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#FF7F50] shadow-[0_0_8px_#FF7F50]" />
+              Secure Admin Access Only
             </div>
 
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-[#b0b0b0] tracking-wider uppercase">Password</label>
-              <div className="relative">
-                <FaLock className="absolute left-4 top-1/2 -translate-y-1/2 text-[#b0b0b0]" />
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-[#1c141d] border border-[#404040] rounded-xl py-3 pl-12 pr-4 text-white focus:outline-none focus:border-[#FF7F50] transition-colors"
-                  placeholder="••••••••"
-                  required
-                />
-              </div>
+            {/* Initials Avatar */}
+            <div className="w-20 h-20 rounded-full bg-[rgba(255,127,80,0.15)] border-2 border-[#FF7F50] text-[#FF7F50] flex items-center justify-center font-black text-2xl shadow-xl shadow-[#FF7F50]/10 mb-4 transition-transform duration-500 hover:scale-110">
+              CD
             </div>
 
-            <button
-              type="submit"
-              disabled={isLoggingIn}
-              className="w-full bg-[#FF7F50] hover:bg-[#ff6a35] text-white font-semibold py-3 rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
-            >
-              {isLoggingIn ? (
-                <>
-                  <FaSpinner className="animate-spin" /> Checking...
-                </>
-              ) : (
-                "Log In"
-              )}
-            </button>
-          </form>
-        </div>
+            {/* Name and Designation */}
+            <h3 className="text-xl font-bold text-[var(--foreground)] tracking-tight">Christian Dela Cruz</h3>
+            <p className="text-[var(--muted)] text-xs font-semibold uppercase tracking-wider mt-1">IT & Cybersecurity Specialist</p>
+
+            {/* Micro details */}
+            <div className="w-full h-px bg-[var(--card-border)]/60 my-6" />
+            <div className="flex gap-4 text-xs text-[var(--muted)]">
+              <div className="flex flex-col">
+                <span className="text-[10px] uppercase font-bold text-[var(--muted)]/50 tracking-wider">Environment</span>
+                <span className="font-semibold text-[var(--foreground)]">Production</span>
+              </div>
+              <div className="w-px bg-[var(--card-border)]/60" />
+              <div className="flex flex-col">
+                <span className="text-[10px] uppercase font-bold text-[var(--muted)]/50 tracking-wider">Role</span>
+                <span className="font-semibold text-[var(--foreground)]">Super Admin</span>
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
     );
   }

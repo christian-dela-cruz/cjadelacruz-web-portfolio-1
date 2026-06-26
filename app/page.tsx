@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState, useRef, useEffect, Suspense, lazy } from "react";
+import React, { useState, useRef, useEffect, Suspense, lazy, Component } from "react";
 import {
   FaGithub,
   FaLinkedin,
@@ -28,10 +28,34 @@ import {
 import { SiCredly } from "react-icons/si";
 import { HiChip, HiCalendar } from "react-icons/hi";
 import { supabase } from "@/lib/supabase";
+import { detectWebGL } from "@/lib/webgl";
+import { ShaderFallback } from "@/components/ShaderFallback";
 
-const Dithering = lazy(() =>
-  import("@paper-design/shaders-react").then((mod) => ({ default: mod.Dithering }))
-);
+const Dithering = typeof window !== "undefined" && detectWebGL()
+  ? lazy(() => import("@paper-design/shaders-react").then((mod) => ({ default: mod.Dithering })))
+  : () => <div className="absolute inset-0 bg-transparent" />;
+
+class ShaderErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: any) {
+    console.warn("Shader WebGL error caught:", error);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return <div className="absolute inset-0 bg-transparent" />;
+    }
+    return this.props.children;
+  }
+}
 
 // ─── Data ────────────────────────────────────────────────────────────────────
 
@@ -318,6 +342,27 @@ const accentBgMd = "rgba(6,182,212,0.15)";
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function HomePage() {
+  const [shaderError, setShaderError] = useState(false);
+  const [isWebGLSupported, setIsWebGLSupported] = useState(false);
+
+  useEffect(() => {
+    setIsWebGLSupported(detectWebGL());
+
+    const handleRejection = (event: PromiseRejectionEvent) => {
+      if (
+        event.reason &&
+        event.reason.message &&
+        (event.reason.message.includes("Paper Shaders") || event.reason.message.includes("WebGL"))
+      ) {
+        event.preventDefault();
+        setShaderError(true);
+      }
+    };
+
+    window.addEventListener("unhandledrejection", handleRejection);
+    return () => window.removeEventListener("unhandledrejection", handleRejection);
+  }, []);
+
   const certScrollRef = useRef<HTMLDivElement>(null);
   
   // Dynamic State variables shadow the module-scope initial seed data
@@ -340,6 +385,7 @@ export default function HomePage() {
   const [slideshowIdx, setSlideshowIdx] = useState(0);
   const slideshowIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [isHeroHovered, setIsHeroHovered] = useState(false);
+  const [isCTAHovered, setIsCTAHovered] = useState(false);
 
   // Fetch data dynamically from Supabase if environment variables are available
   useEffect(() => {
@@ -468,23 +514,29 @@ export default function HomePage() {
       {/* ── HERO ──────────────────────────────────────────────────────────── */}
       <section
         id="home"
-        className="min-h-screen flex items-center justify-center px-6 py-20 scroll-mt-16 relative overflow-hidden"
+        className="min-h-screen flex items-center justify-center px-6 py-20 scroll-mt-16 relative overflow-hidden pulsing-gradient-bg"
         onMouseEnter={() => setIsHeroHovered(true)}
         onMouseLeave={() => setIsHeroHovered(false)}
       >
         {/* WebGL Shader Dithering Background */}
         <div className="absolute inset-0 z-0 pointer-events-none opacity-25 dark:opacity-20 mix-blend-normal transition-opacity duration-500">
-          <Suspense fallback={<div className="absolute inset-0 bg-transparent" />}>
-            <Dithering
-              colorBack="#00000000" // Transparent background
-              colorFront="#FF7F50"  // Accent Coral color
-              shape="warp"
-              type="4x4"
-              speed={isHeroHovered ? 0.5 : 0.15}
-              className="size-full"
-              minPixelRatio={1}
-            />
-          </Suspense>
+          {!shaderError && isWebGLSupported ? (
+            <ShaderErrorBoundary>
+              <Suspense fallback={<div className="absolute inset-0 bg-transparent" />}>
+                <Dithering
+                  colorBack="#00000000" // Transparent background
+                  colorFront="#FF7F50"  // Accent Coral color
+                  shape="warp"
+                  type="4x4"
+                  speed={isHeroHovered ? 0.5 : 0.15}
+                  className="size-full"
+                  minPixelRatio={1}
+                />
+              </Suspense>
+            </ShaderErrorBoundary>
+          ) : (
+            <ShaderFallback color="#FF7F50" speed={isHeroHovered ? 0.5 : 0.15} />
+          )}
         </div>
 
         <div className="max-w-6xl w-full mx-auto relative z-10">
@@ -1560,6 +1612,73 @@ export default function HomePage() {
               </>
             );
           })()}
+        </div>
+      </section>
+
+      {/* ── CTA SECTION ────────────────────────────────────────────────────── */}
+      <section className="py-12 w-full flex justify-center items-center px-6 md:px-8 relative z-10 max-w-6xl mx-auto">
+        <div 
+          className="w-full relative"
+          onMouseEnter={() => setIsCTAHovered(true)}
+          onMouseLeave={() => setIsCTAHovered(false)}
+        >
+          <div className="relative overflow-hidden rounded-[32px] sm:rounded-[48px] border border-[var(--card-border)] bg-[var(--card-bg)]/30 backdrop-blur-sm shadow-xl min-h-[500px] flex flex-col items-center justify-center transition-all duration-500 hover:border-[#FF7F50]/30 hover:shadow-2xl px-6 py-12 md:py-16">
+            {/* WebGL Shader Dithering Background */}
+            <div className="absolute inset-0 z-0 pointer-events-none opacity-35 dark:opacity-20 mix-blend-multiply dark:mix-blend-screen transition-opacity duration-500 w-full h-full">
+              {!shaderError && isWebGLSupported ? (
+                <ShaderErrorBoundary>
+                  <Suspense fallback={<div className="absolute inset-0 bg-transparent" />}>
+                    <Dithering
+                      colorBack="#00000000" // Transparent
+                      colorFront="#FF7F50"  // Accent Coral
+                      shape="warp"
+                      type="4x4"
+                      speed={isCTAHovered ? 0.5 : 0.15}
+                      className="size-full"
+                      minPixelRatio={1}
+                    />
+                  </Suspense>
+                </ShaderErrorBoundary>
+              ) : (
+                <ShaderFallback color="#FF7F50" speed={isCTAHovered ? 0.5 : 0.15} />
+              )}
+            </div>
+
+            <div className="relative z-10 px-4 max-w-3xl mx-auto text-center flex flex-col items-center">
+              {/* Pulsing Status Badge */}
+              <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#FF7F50]/20 bg-[rgba(255,127,80,0.05)] px-4 py-1.5 text-xs font-semibold text-[#FF7F50] backdrop-blur-sm">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#FF7F50] opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-[#FF7F50]"></span>
+                </span>
+                Open for Collaborations
+              </div>
+
+              {/* Headline */}
+              <h2 className="text-3xl sm:text-4xl md:text-5xl font-black uppercase tracking-wider text-[var(--foreground)] mb-6 leading-tight">
+                Ready to elevate <br />
+                <span className="text-[var(--muted)]">your next project?</span>
+              </h2>
+              
+              {/* Description */}
+              <p className="text-[var(--muted)] text-sm sm:text-base max-w-xl mb-8 leading-relaxed font-medium">
+                Looking for a skilled IT & Cybersecurity Specialist or a Full-Stack Developer? 
+                Let's discuss how we can build secure, reliable, and premium systems together.
+              </p>
+
+              {/* Button */}
+              <button 
+                onClick={(e) => {
+                  e.preventDefault();
+                  document.getElementById("contact")?.scrollIntoView({ behavior: "smooth" });
+                }}
+                className="group relative inline-flex h-12 items-center justify-center gap-2 overflow-hidden rounded-xl bg-[#FF7F50] hover:bg-[#ff6a35] px-8 text-sm font-bold text-white transition-all duration-300 hover:scale-105 active:scale-95 hover:ring-4 hover:ring-[#FF7F50]/20 cursor-pointer shadow-lg shadow-[#FF7F50]/25"
+              >
+                <span className="relative z-10">Let's Work Together</span>
+                <FaArrowRight size={12} className="relative z-10 transition-transform duration-300 group-hover:translate-x-1" />
+              </button>
+            </div>
+          </div>
         </div>
       </section>
 
