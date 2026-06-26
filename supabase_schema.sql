@@ -92,3 +92,34 @@ INSERT INTO public.seminars (title, organizer, date, image_url) VALUES
 ('Pathways to Employability: Career Readiness Toolkit', 'Mapúa Malayan Colleges Laguna & Arizona State University', 'April 21, 2026', 'https://github.com/user-attachments/assets/bead45aa-3aa9-4650-abf2-145886afe857'),
 ('Technopreneurship: A Journey in Building Your Own Tech Start Up', 'CCIS – Mapúa MCL & Prosperna', 'March 7, 2024', 'https://github.com/user-attachments/assets/a435f8ad-382a-4fe0-88de-e5cd85acdff9'),
 ('Architecting the Future with Decentralization: An Introduction to Blockchain', 'JPCS Mapúa MCL', 'February 5, 2025', 'https://github.com/user-attachments/assets/7e92d12b-92f8-45a5-87da-86df7e956a60');
+
+-- 5. Create Profile Settings Table
+CREATE TABLE IF NOT EXISTS public.profile (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL DEFAULT 'Christian Dela Cruz',
+  title TEXT NOT NULL DEFAULT 'Information Technology & Cybersecurity Specialist',
+  description TEXT NOT NULL DEFAULT 'Full-stack developer with expertise in mobile app development, networking, and cloud infrastructure. Passionate about building secure, scalable, and user-centric solutions.',
+  profile_image_url TEXT DEFAULT '/Formal_Picture.jpg',
+  resume_url TEXT DEFAULT '/resume.pdf',
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Enable Row Level Security (RLS) on profile table
+ALTER TABLE public.profile ENABLE ROW LEVEL SECURITY;
+
+-- Create Policies to allow public read-only access and authenticated full access
+CREATE POLICY "Allow public read access on profile" ON public.profile FOR SELECT USING (true);
+CREATE POLICY "Allow auth write access on profile" ON public.profile FOR ALL TO authenticated USING (true);
+
+-- Insert original mock profile data
+INSERT INTO public.profile (id, name, title, description, profile_image_url, resume_url)
+VALUES (
+  '00000000-0000-0000-0000-000000000000',
+  'Christian Dela Cruz',
+  'Information Technology & Cybersecurity Specialist',
+  'Full-stack developer with expertise in mobile app development, networking, and cloud infrastructure. Passionate about building secure, scalable, and user-centric solutions.',
+  '/Formal_Picture.jpg',
+  '/resume.pdf'
+)
+ON CONFLICT (id) DO NOTHING;
+

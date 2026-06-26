@@ -321,6 +321,13 @@ export default function HomePage() {
   const [certifications, setCertifications] = useState(initialCertifications);
   const [projects, setProjects] = useState(initialProjects);
   const [seminars, setSeminars] = useState(initialSeminars);
+  const [profile, setProfile] = useState({
+    name: "Christian Dela Cruz",
+    title: "Information Technology & Cybersecurity Specialist",
+    description: "Full-stack developer with expertise in mobile app development, networking, and cloud infrastructure. Passionate about building secure, scalable, and user-centric solutions.",
+    profile_image_url: "/Formal_Picture.jpg",
+    resume_url: "/resume.pdf"
+  });
 
   const [hoveredProject, setHoveredProject] = useState<number | null>(null);
   const [hoveredEntry, setHoveredEntry] = useState<string | null>(null);
@@ -333,6 +340,21 @@ export default function HomePage() {
   useEffect(() => {
     const loadSupabaseData = async () => {
       try {
+        // Fetch profile settings
+        const { data: profileData } = await supabase
+          .from("profile")
+          .select("*")
+          .maybeSingle();
+        if (profileData) {
+          setProfile({
+            name: profileData.name || "Christian Dela Cruz",
+            title: profileData.title || "Information Technology & Cybersecurity Specialist",
+            description: profileData.description || "",
+            profile_image_url: profileData.profile_image_url || "/Formal_Picture.jpg",
+            resume_url: profileData.resume_url || "/resume.pdf"
+          });
+        }
+
         // Fetch skills
         const { data: skillsData } = await supabase
           .from("skills")
@@ -452,24 +474,24 @@ export default function HomePage() {
                 className="text-4xl sm:text-5xl lg:text-6xl font-bold mb-4 leading-tight"
                 style={{ color: "var(--foreground)" }}
               >
-                Christian{" "}
-                <span style={{ color: "var(--accent)" }}>Dela Cruz</span>
+                {profile.name.split(" ")[0]}{" "}
+                <span style={{ color: "var(--accent)" }}>
+                  {profile.name.split(" ").slice(1).join(" ")}
+                </span>
               </h1>
 
               <h2
                 className="text-lg sm:text-xl font-semibold mb-4"
                 style={{ color: "var(--foreground)" }}
               >
-                Information Technology &amp; Cybersecurity Specialist
+                {profile.title}
               </h2>
 
               <p
                 className="text-base leading-relaxed max-w-xl mx-auto lg:mx-0 mb-10"
                 style={{ color: "var(--foreground)" }}
               >
-                Full-stack developer with expertise in mobile app development,
-                networking, and cloud infrastructure. Passionate about building
-                secure, scalable, and user-centric solutions.
+                {profile.description}
               </p>
 
               {/* CTA Buttons */}
@@ -509,8 +531,9 @@ export default function HomePage() {
                 </a>
 
                 <a
-                  href="/resume.pdf"
-                  download
+                  href={profile.resume_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm transition-all hover:scale-105 active:scale-95"
                   style={{
                     background: "var(--card-bg)",
@@ -519,7 +542,7 @@ export default function HomePage() {
                   }}
                 >
                   <FaDownload size={13} />
-                  Download Resume
+                  View Resume
                 </a>
               </div>
 
@@ -569,11 +592,12 @@ export default function HomePage() {
                 }}
               >
                 <Image
-                  src="/Formal_Picture.jpg"
-                  alt="Christian Dela Cruz"
+                  src={profile.profile_image_url}
+                  alt={profile.name}
                   fill
                   className="object-cover"
                   priority
+                  unoptimized={profile.profile_image_url.startsWith("http")}
                 />
               </div>
             </div>

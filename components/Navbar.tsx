@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { HiMenu, HiX } from "react-icons/hi";
+import { FaSun, FaMoon } from "react-icons/fa";
+import { usePathname } from "next/navigation";
 
 const navLinks = [
   { href: "#home", label: "Home", id: "home" },
@@ -11,8 +13,27 @@ const navLinks = [
 ];
 
 export default function Navbar() {
+  const pathname = usePathname();
   const [activeSection, setActiveSection] = useState("home");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [theme, setTheme] = useState("dark");
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("theme") || "dark";
+    setTheme(savedTheme);
+    document.documentElement.setAttribute("data-theme", savedTheme);
+  }, []);
+
+  const toggleTheme = () => {
+    const nextTheme = theme === "dark" ? "light" : "dark";
+    setTheme(nextTheme);
+    localStorage.setItem("theme", nextTheme);
+    document.documentElement.setAttribute("data-theme", nextTheme);
+  };
+
+  if (pathname && pathname.startsWith("/admin")) {
+    return null;
+  }
 
   useEffect(() => {
     const observers: IntersectionObserver[] = [];
@@ -104,15 +125,31 @@ export default function Navbar() {
           })}
         </ul>
 
-        {/* Mobile hamburger */}
-        <button
-          className="md:hidden p-2 rounded-lg transition-colors"
-          style={{ color: "var(--muted)" }}
-          onClick={() => setMenuOpen(!menuOpen)}
-          aria-label="Toggle menu"
-        >
-          {menuOpen ? <HiX size={22} /> : <HiMenu size={22} />}
-        </button>
+        {/* Theme Toggle & Hamburger Group */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={toggleTheme}
+            className="p-2 rounded-xl border transition-all hover:scale-105 active:scale-95 cursor-pointer flex items-center justify-center w-9 h-9"
+            style={{
+              borderColor: "var(--card-border)",
+              background: "var(--card-bg)",
+              color: "var(--foreground)"
+            }}
+            aria-label="Toggle theme"
+          >
+            {theme === "dark" ? <FaSun size={14} className="text-[#FF7F50]" /> : <FaMoon size={14} />}
+          </button>
+
+          {/* Mobile hamburger */}
+          <button
+            className="md:hidden p-2 rounded-lg transition-colors"
+            style={{ color: "var(--muted)" }}
+            onClick={() => setMenuOpen(!menuOpen)}
+            aria-label="Toggle menu"
+          >
+            {menuOpen ? <HiX size={22} /> : <HiMenu size={22} />}
+          </button>
+        </div>
       </div>
 
       {/* Mobile menu */}
