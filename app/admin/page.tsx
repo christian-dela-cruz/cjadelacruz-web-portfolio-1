@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useEffect, useRef, lazy, Suspense, Component } from "react";
 import { supabase } from "@/lib/supabase";
@@ -24,6 +24,10 @@ import {
   FaEyeSlash,
   FaInfoCircle,
   FaChevronUp,
+  FaBars,
+  FaSearch,
+  FaInbox,
+  FaChevronLeft,
 } from "react-icons/fa";
 
 import { detectWebGL } from "@/lib/webgl";
@@ -93,9 +97,23 @@ export default function AdminPage() {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoginHovered, setIsLoginHovered] = useState(false);
+  const [authView, setAuthView] = useState<"login" | "forgot" | "reset">("login");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [resetSuccess, setResetSuccess] = useState("");
+  const [isRecovering, setIsRecovering] = useState(false);
 
   // Active Tab
   const [activeTab, setActiveTab] = useState<Tab>("projects");
+
+  // Sidebar
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  // Search, Filter & Pagination
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterValue, setFilterValue] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 8;
 
   // Data States
   const [projects, setProjects] = useState<any[]>([]);
@@ -159,6 +177,15 @@ export default function AdminPage() {
     setTheme(savedTheme);
     document.documentElement.setAttribute("data-theme", savedTheme);
 
+    // Check if recovery parameter is present in URL
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("recovery") === "true") {
+        setIsRecovering(true);
+        setAuthView("reset");
+      }
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setIsCheckingSession(false);
@@ -166,8 +193,12 @@ export default function AdminPage() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
+      if (event === "PASSWORD_RECOVERY") {
+        setIsRecovering(true);
+        setAuthView("reset");
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -236,6 +267,59 @@ export default function AdminPage() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setSession(null);
+    setIsRecovering(false);
+    setAuthView("login");
+  };
+
+  const handleRequestReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError("");
+    setResetSuccess("");
+    setIsLoggingIn(true);
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/admin?recovery=true`,
+      });
+      if (error) throw error;
+      setResetSuccess("A password reset link has been sent to your email.");
+    } catch (err: any) {
+      setAuthError(err.message || "Failed to send reset link");
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleUpdatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError("");
+    setResetSuccess("");
+
+    if (newPassword !== confirmPassword) {
+      setAuthError("Passwords do not match");
+      return;
+    }
+
+    setIsLoggingIn(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      setResetSuccess("Your password has been successfully updated.");
+      setTimeout(() => {
+        setIsRecovering(false);
+        setAuthView("login");
+        setNewPassword("");
+        setConfirmPassword("");
+        setResetSuccess("");
+        if (typeof window !== "undefined") {
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+      }, 2500);
+    } catch (err: any) {
+      setAuthError(err.message || "Failed to update password");
+    } finally {
+      setIsLoggingIn(false);
+    }
   };
 
   // Image Upload helper
@@ -415,6 +499,56 @@ export default function AdminPage() {
     }
   };
 
+  // Reset page when tab/search/filter changes
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, searchQuery, filterValue]);
+
+  // Filtered + paginated data (computed each render)
+  const getFilteredData = (): any[] => {
+    const q = searchQuery.toLowerCase();
+    if (activeTab === "projects") {
+      return projects.filter((p) => {
+        const matchSearch = p.title?.toLowerCase().includes(q) || p.description?.toLowerCase().includes(q);
+        const matchFilter = filterValue === "all" || p.status === filterValue;
+        return matchSearch && matchFilter;
+      });
+    }
+    if (activeTab === "certifications") {
+      return certifications.filter((c) =>
+        c.name?.toLowerCase().includes(q) || c.issuer?.toLowerCase().includes(q)
+      );
+    }
+    if (activeTab === "seminars") {
+      return seminars.filter((s) =>
+        s.title?.toLowerCase().includes(q) || s.organizer?.toLowerCase().includes(q)
+      );
+    }
+    if (activeTab === "skills") {
+      return skills.filter((s) =>
+        s.category?.toLowerCase().includes(q) || s.items?.join(" ").toLowerCase().includes(q)
+      );
+    }
+    return [];
+  };
+
+  const filteredData = getFilteredData();
+  const totalPages = Math.max(1, Math.ceil(filteredData.length / ITEMS_PER_PAGE));
+  const paginatedData = filteredData.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
+  const emptyState = (
+    <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
+      <div className="w-16 h-16 rounded-2xl bg-[rgba(255,127,80,0.1)] border border-[rgba(255,127,80,0.15)] flex items-center justify-center">
+        <FaInbox className="text-2xl text-[#FF7F50]/50" />
+      </div>
+      <div>
+        <p className="text-[var(--foreground)] font-semibold text-base">No entries yet</p>
+        <p className="text-[var(--muted)] text-sm mt-1">Click &ldquo;Add New Entry&rdquo; to get started.</p>
+      </div>
+    </div>
+  );
+
   if (isCheckingSession) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#1c141d] text-white">
@@ -424,7 +558,7 @@ export default function AdminPage() {
   }
 
   // LOGIN SCREEN
-  if (!session) {
+  if (!session || isRecovering) {
     return (
       <div className="admin-page min-h-screen flex flex-col md:flex-row bg-[var(--background)] text-[var(--foreground)] transition-colors duration-300 relative pulsing-gradient-bg">
         {/* Floating Theme Toggle */}
@@ -437,75 +571,237 @@ export default function AdminPage() {
         </button>
 
         {/* Left column: form */}
-        <section className="flex-1 flex items-center justify-center p-8 z-10">
+        <section className="flex-1 flex items-center justify-center p-6 sm:p-12 md:p-16 z-10">
           <div className="max-w-md w-full">
             <div className="flex flex-col gap-6">
-              <div>
-                <h1 className="text-3xl sm:text-4xl font-black uppercase tracking-wider text-[var(--foreground)]">
-                  Admin <span className="text-[#FF7F50]">Access</span>
-                </h1>
-                <p className="text-[var(--muted)] text-sm mt-1">Sign in to manage your portfolio</p>
-              </div>
-
-              <form onSubmit={handleLogin} className="space-y-6">
-                {authError && (
-                  <div className="p-4 bg-red-950/40 border border-red-500/30 rounded-xl text-red-200 text-sm text-center">
-                    {authError}
+              
+              {authView === "login" && (
+                <>
+                  <div>
+                    <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-[var(--foreground)]">
+                      Admin <span className="text-[#FF7F50]">Access</span>
+                    </h1>
+                    <p className="text-[var(--muted)] text-sm mt-1.5">Sign in to manage your portfolio</p>
                   </div>
-                )}
 
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-[var(--muted)] tracking-wider uppercase">Email Address</label>
-                  <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)]/20 backdrop-blur-sm transition-all focus-within:border-[#FF7F50] focus-within:bg-[rgba(255,127,80,0.05)] relative flex items-center">
-                    <FaEnvelope className="absolute left-4 text-[var(--muted)] pointer-events-none" />
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="w-full bg-transparent text-sm py-4 pl-12 pr-4 text-[var(--foreground)] focus:outline-none"
-                      placeholder="admin@example.com"
-                      required
-                    />
+                  <form onSubmit={handleLogin} className="space-y-5">
+                    {authError && (
+                      <div className="p-4 bg-red-950/40 border border-red-500/30 rounded-xl text-red-200 text-sm text-center animate-fade-in">
+                        {authError}
+                      </div>
+                    )}
+
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-[var(--foreground)]/80">Email Address</label>
+                      <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)]/20 backdrop-blur-sm transition-all focus-within:border-[#FF7F50] focus-within:bg-[rgba(255,127,80,0.05)] relative flex items-center">
+                        <FaEnvelope className="absolute left-4 text-[var(--muted)] pointer-events-none" />
+                        <input
+                          type="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          className="w-full bg-transparent text-sm py-3.5 pl-11 pr-4 text-[var(--foreground)] focus:outline-none"
+                          placeholder="admin@example.com"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label className="text-sm font-medium text-[var(--foreground)]/80">Password</label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAuthView("forgot");
+                            setAuthError("");
+                            setResetSuccess("");
+                          }}
+                          className="text-xs font-semibold text-[#FF7F50] hover:text-[#ff6a35] hover:underline focus:outline-none transition-colors cursor-pointer"
+                        >
+                          Forgot password?
+                        </button>
+                      </div>
+                      <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)]/20 backdrop-blur-sm transition-all focus-within:border-[#FF7F50] focus-within:bg-[rgba(255,127,80,0.05)] relative flex items-center">
+                        <FaLock className="absolute left-4 text-[var(--muted)] pointer-events-none" />
+                        <input
+                          type={showPassword ? "text" : "password"}
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          className="w-full bg-transparent text-sm py-3.5 pl-11 pr-11 text-[var(--foreground)] focus:outline-none"
+                          placeholder="••••••••"
+                          required
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-4 text-[var(--muted)] hover:text-[#FF7F50] transition-colors focus:outline-none cursor-pointer"
+                          title={showPassword ? "Hide password" : "Show password"}
+                        >
+                          {showPassword ? <FaEyeSlash size={16} /> : <FaEye size={16} />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isLoggingIn}
+                      className="w-full bg-[#FF7F50] hover:bg-[#ff6a35] text-white font-semibold py-3.5 rounded-xl transition-all hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer shadow-lg shadow-[#FF7F50]/20 mt-2"
+                    >
+                      {isLoggingIn ? (
+                        <>
+                          <FaSpinner className="animate-spin text-lg" /> Logging In...
+                        </>
+                      ) : (
+                        "Log In"
+                      )}
+                    </button>
+                  </form>
+                </>
+              )}
+
+              {authView === "forgot" && (
+                <>
+                  <div>
+                    <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-[var(--foreground)]">
+                      Reset <span className="text-[#FF7F50]">Password</span>
+                    </h1>
+                    <p className="text-[var(--muted)] text-sm mt-1.5">Enter your email to receive a password reset link</p>
                   </div>
-                </div>
 
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-[var(--muted)] tracking-wider uppercase">Password</label>
-                  <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)]/20 backdrop-blur-sm transition-all focus-within:border-[#FF7F50] focus-within:bg-[rgba(255,127,80,0.05)] relative flex items-center">
-                    <FaLock className="absolute left-4 text-[var(--muted)] pointer-events-none" />
-                    <input
-                      type={showPassword ? "text" : "password"}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="w-full bg-transparent text-sm py-4 pl-12 pr-12 text-[var(--foreground)] focus:outline-none"
-                      placeholder="••••••••"
-                      required
-                    />
+                  <form onSubmit={handleRequestReset} className="space-y-5">
+                    {authError && (
+                      <div className="p-4 bg-red-950/40 border border-red-500/30 rounded-xl text-red-200 text-sm text-center animate-fade-in">
+                        {authError}
+                      </div>
+                    )}
+                    
+                    {resetSuccess && (
+                      <div className="p-4 bg-emerald-950/40 border border-emerald-500/30 rounded-xl text-emerald-200 text-sm text-center animate-fade-in">
+                        {resetSuccess}
+                      </div>
+                    )}
+
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-[var(--foreground)]/80">Email Address</label>
+                      <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)]/20 backdrop-blur-sm transition-all focus-within:border-[#FF7F50] focus-within:bg-[rgba(255,127,80,0.05)] relative flex items-center">
+                        <FaEnvelope className="absolute left-4 text-[var(--muted)] pointer-events-none" />
+                        <input
+                          type="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          className="w-full bg-transparent text-sm py-3.5 pl-11 pr-4 text-[var(--foreground)] focus:outline-none"
+                          placeholder="admin@example.com"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isLoggingIn}
+                      className="w-full bg-[#FF7F50] hover:bg-[#ff6a35] text-white font-semibold py-3.5 rounded-xl transition-all hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer shadow-lg shadow-[#FF7F50]/20 mt-2"
+                    >
+                      {isLoggingIn ? (
+                        <>
+                          <FaSpinner className="animate-spin text-lg" /> Sending...
+                        </>
+                      ) : (
+                        "Send Reset Link"
+                      )}
+                    </button>
+
                     <button
                       type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-4 text-[var(--muted)] hover:text-[#FF7F50] transition-colors focus:outline-none cursor-pointer"
-                      title={showPassword ? "Hide password" : "Show password"}
+                      onClick={() => {
+                        setAuthView("login");
+                        setAuthError("");
+                        setResetSuccess("");
+                      }}
+                      className="w-full text-center text-sm font-semibold text-[var(--muted)] hover:text-[#FF7F50] hover:underline focus:outline-none transition-colors mt-4 cursor-pointer"
                     >
-                      {showPassword ? <FaEyeSlash size={16} /> : <FaEye size={16} />}
+                      Back to Log In
                     </button>
-                  </div>
-                </div>
+                  </form>
+                </>
+              )}
 
-                <button
-                  type="submit"
-                  disabled={isLoggingIn}
-                  className="w-full bg-[#FF7F50] hover:bg-[#ff6a35] text-white font-bold py-4 rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer shadow-lg shadow-[#FF7F50]/20"
-                >
-                  {isLoggingIn ? (
-                    <>
-                      <FaSpinner className="animate-spin text-lg" /> Verifying...
-                    </>
-                  ) : (
-                    "Authorize Session"
-                  )}
-                </button>
-              </form>
+              {authView === "reset" && (
+                <>
+                  <div>
+                    <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-[var(--foreground)]">
+                      Set New <span className="text-[#FF7F50]">Password</span>
+                    </h1>
+                    <p className="text-[var(--muted)] text-sm mt-1.5">Create a new secure password for your account</p>
+                  </div>
+
+                  <form onSubmit={handleUpdatePassword} className="space-y-5">
+                    {authError && (
+                      <div className="p-4 bg-red-950/40 border border-red-500/30 rounded-xl text-red-200 text-sm text-center animate-fade-in">
+                        {authError}
+                      </div>
+                    )}
+                    
+                    {resetSuccess && (
+                      <div className="p-4 bg-emerald-950/40 border border-emerald-500/30 rounded-xl text-emerald-200 text-sm text-center animate-fade-in">
+                        {resetSuccess}
+                      </div>
+                    )}
+
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-[var(--foreground)]/80">New Password</label>
+                      <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)]/20 backdrop-blur-sm transition-all focus-within:border-[#FF7F50] focus-within:bg-[rgba(255,127,80,0.05)] relative flex items-center">
+                        <FaLock className="absolute left-4 text-[var(--muted)] pointer-events-none" />
+                        <input
+                          type={showPassword ? "text" : "password"}
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          className="w-full bg-transparent text-sm py-3.5 pl-11 pr-11 text-[var(--foreground)] focus:outline-none"
+                          placeholder="••••••••"
+                          required
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-4 text-[var(--muted)] hover:text-[#FF7F50] transition-colors focus:outline-none cursor-pointer"
+                          title={showPassword ? "Hide password" : "Show password"}
+                        >
+                          {showPassword ? <FaEyeSlash size={16} /> : <FaEye size={16} />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-[var(--foreground)]/80">Confirm Password</label>
+                      <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)]/20 backdrop-blur-sm transition-all focus-within:border-[#FF7F50] focus-within:bg-[rgba(255,127,80,0.05)] relative flex items-center">
+                        <FaLock className="absolute left-4 text-[var(--muted)] pointer-events-none" />
+                        <input
+                          type={showPassword ? "text" : "password"}
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          className="w-full bg-transparent text-sm py-3.5 pl-11 pr-11 text-[var(--foreground)] focus:outline-none"
+                          placeholder="••••••••"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isLoggingIn}
+                      className="w-full bg-[#FF7F50] hover:bg-[#ff6a35] text-white font-semibold py-3.5 rounded-xl transition-all hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer shadow-lg shadow-[#FF7F50]/20 mt-2"
+                    >
+                      {isLoggingIn ? (
+                        <>
+                          <FaSpinner className="animate-spin text-lg" /> Updating...
+                        </>
+                      ) : (
+                        "Update Password"
+                      )}
+                    </button>
+                  </form>
+                </>
+              )}
+
             </div>
           </div>
         </section>
@@ -535,38 +831,6 @@ export default function AdminPage() {
               <ShaderFallback color="#FF7F50" speed={isLoginHovered ? 0.45 : 0.12} />
             )}
           </div>
-
-          {/* Premium Glassmorphic Overlay Badge */}
-          <div className="relative z-10 max-w-sm w-full mx-6 p-8 rounded-3xl bg-[var(--card-bg)]/40 backdrop-blur-xl border border-[var(--card-border)] shadow-2xl flex flex-col items-center text-center text-[var(--foreground)] transition-colors duration-300">
-            {/* Pulsing secure badge */}
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[rgba(255,127,80,0.1)] border border-[rgba(255,127,80,0.2)] text-[10px] font-black tracking-widest text-[#FF7F50] uppercase mb-6 animate-pulse">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#FF7F50] shadow-[0_0_8px_#FF7F50]" />
-              Secure Admin Access Only
-            </div>
-
-            {/* Initials Avatar */}
-            <div className="w-20 h-20 rounded-full bg-[rgba(255,127,80,0.15)] border-2 border-[#FF7F50] text-[#FF7F50] flex items-center justify-center font-black text-2xl shadow-xl shadow-[#FF7F50]/10 mb-4 transition-transform duration-500 hover:scale-110">
-              CD
-            </div>
-
-            {/* Name and Designation */}
-            <h3 className="text-xl font-bold text-[var(--foreground)] tracking-tight">Christian Dela Cruz</h3>
-            <p className="text-[var(--muted)] text-xs font-semibold uppercase tracking-wider mt-1">IT & Cybersecurity Specialist</p>
-
-            {/* Micro details */}
-            <div className="w-full h-px bg-[var(--card-border)]/60 my-6" />
-            <div className="flex gap-4 text-xs text-[var(--muted)]">
-              <div className="flex flex-col">
-                <span className="text-[10px] uppercase font-bold text-[var(--muted)]/50 tracking-wider">Environment</span>
-                <span className="font-semibold text-[var(--foreground)]">Production</span>
-              </div>
-              <div className="w-px bg-[var(--card-border)]/60" />
-              <div className="flex flex-col">
-                <span className="text-[10px] uppercase font-bold text-[var(--muted)]/50 tracking-wider">Role</span>
-                <span className="font-semibold text-[var(--foreground)]">Super Admin</span>
-              </div>
-            </div>
-          </div>
         </section>
       </div>
     );
@@ -575,24 +839,35 @@ export default function AdminPage() {
   // DASHBOARD SCREEN
   return (
     <div className="admin-page min-h-screen bg-[var(--background)] text-[var(--foreground)] flex flex-col transition-colors duration-300">
-      {/* Dashboard Custom Header */}
-      <header className="bg-[var(--navbar)] border-b border-[var(--card-border)] px-6 py-4 flex items-center justify-between sticky top-0 z-10">
+      {/* Dashboard Header */}
+      <header className="bg-[var(--navbar)] border-b border-[var(--card-border)] px-5 py-4 flex items-center justify-between sticky top-0 z-10">
         <div className="flex items-center gap-3">
-          <span className="bg-[#FF7F50] text-[#1c141d] font-black px-3 py-1.5 rounded-lg text-sm tracking-tighter shadow-md">
-            CDC
-          </span>
-          <span className="font-bold text-lg hidden sm:inline">Portfolio Editor</span>
+          {/* Sidebar toggle – desktop only */}
+          <button
+            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            className="hidden md:flex items-center justify-center w-9 h-9 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] hover:bg-[var(--card-border)] transition-all cursor-pointer text-[var(--muted)] hover:text-[var(--foreground)] flex-shrink-0"
+            aria-label="Toggle sidebar"
+          >
+            {isSidebarCollapsed ? <FaBars size={13} /> : <FaChevronLeft size={11} />}
+          </button>
+          <div
+            onClick={() => setActiveTab("profile")}
+            className="flex items-center text-2xl font-bold tracking-tighter select-none cursor-pointer hover:opacity-90 transition-opacity"
+          >
+            <span className="text-neutral-400 dark:text-neutral-600 font-bold opacity-80">C</span>
+            <span className="text-[#FF7F50] font-black text-3xl -mx-0.5">D</span>
+            <span className="text-neutral-400 dark:text-neutral-600 font-bold opacity-80">C</span>
+          </div>
           <a
             href="/"
             target="_blank"
-            className="flex items-center gap-1.5 text-xs bg-[var(--card-bg)] hover:bg-[var(--card-border)] px-3 py-1.5 rounded-lg border border-[var(--card-border)] transition-colors ml-4 text-[var(--muted)] hover:text-[var(--foreground)]"
+            className="flex items-center gap-1.5 text-xs bg-[var(--card-bg)] hover:bg-[var(--card-border)] px-3 py-1.5 rounded-lg border border-[var(--card-border)] transition-colors text-[var(--muted)] hover:text-[var(--foreground)]"
           >
             <FaEye /> Live View
           </a>
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Theme Toggle */}
           <button
             onClick={toggleTheme}
             className="p-2 rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] transition-all hover:scale-105 active:scale-95 cursor-pointer flex items-center justify-center w-9 h-9"
@@ -600,8 +875,6 @@ export default function AdminPage() {
           >
             {theme === "dark" ? <FaSun size={14} className="text-[#FF7F50]" /> : <FaMoon size={14} />}
           </button>
-
-          {/* Mobile-Only Logout Icon */}
           <button
             onClick={handleLogout}
             className="md:hidden flex items-center justify-center text-red-400 hover:text-red-300 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl w-9 h-9 transition-all hover:scale-105 active:scale-95 cursor-pointer"
@@ -613,10 +886,12 @@ export default function AdminPage() {
       </header>
 
       <div className="flex-1 flex flex-col md:flex-row items-stretch">
-        {/* Navigation Sidebar */}
-        <aside className="w-full md:w-64 bg-[var(--card-bg)]/20 border-r border-[var(--card-border)] p-4 flex flex-row md:flex-col justify-between md:justify-start gap-4 overflow-x-auto md:overflow-x-visible md:sticky md:top-[73px] md:h-[calc(100vh-73px)]">
-          {/* Sidebar Nav Tabs */}
-          <div className="flex flex-row md:flex-col gap-2 flex-1">
+        {/* Desktop Collapsible Sidebar */}
+        <aside
+          style={{ width: isSidebarCollapsed ? "68px" : "256px" }}
+          className="hidden md:flex flex-col justify-between border-r border-[var(--card-border)] bg-[var(--card-bg)]/20 p-3 gap-2 md:sticky md:top-[73px] md:h-[calc(100vh-73px)] transition-[width] duration-300 ease-in-out overflow-hidden flex-shrink-0"
+        >
+          <div className="flex flex-col gap-1.5">
             {(
               [
                 { id: "profile", label: "Hero Settings", icon: FaUserCog },
@@ -632,46 +907,53 @@ export default function AdminPage() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all whitespace-nowrap cursor-pointer ${
-                    isActive
-                      ? "bg-[#FF7F50] text-white shadow-lg"
+                  title={isSidebarCollapsed ? tab.label : undefined}
+                  className={`flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer overflow-hidden whitespace-nowrap
+                    ${isSidebarCollapsed ? "justify-center" : ""}
+                    ${isActive
+                      ? "bg-[#FF7F50] text-white shadow-lg shadow-[#FF7F50]/20"
                       : "text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--card-bg)]"
-                  }`}
+                    }`}
                 >
-                  <Icon className="text-lg" />
-                  {tab.label}
+                  <Icon className="text-base flex-shrink-0" />
+                  {!isSidebarCollapsed && <span>{tab.label}</span>}
                 </button>
               );
             })}
           </div>
 
-          {/* User Card Profile Widget */}
-          <div className="hidden md:block mt-auto pt-4 border-t border-[var(--card-border)] relative">
-            <button
-              onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-              className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-[var(--card-bg)] border border-transparent hover:border-[var(--card-border)] transition-all cursor-pointer text-left"
-            >
-              <div className="flex items-center gap-3">
-                {/* Initials Avatar */}
-                <div className="w-10 h-10 rounded-full bg-[rgba(255,127,80,0.15)] border border-[rgba(255,127,80,0.3)] text-[#FF7F50] flex items-center justify-center font-bold text-sm flex-shrink-0">
-                  {profName ? profName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase() : "AD"}
+          {/* User Card */}
+          <div className="mt-auto pt-3 border-t border-[var(--card-border)] relative">
+            {isSidebarCollapsed ? (
+              <button
+                onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                title={profName || "Admin User"}
+                className="w-full flex justify-center"
+              >
+                <div className="w-10 h-10 rounded-full bg-[rgba(255,127,80,0.15)] border border-[rgba(255,127,80,0.3)] text-[#FF7F50] flex items-center justify-center font-bold text-sm cursor-pointer hover:bg-[rgba(255,127,80,0.25)] transition-colors">
+                  {profName ? profName.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase() : "AD"}
                 </div>
-                {/* Profile Text */}
-                <div className="truncate w-32">
-                  <h4 className="text-sm font-bold text-[var(--foreground)] truncate">
-                    {profName || "Admin User"}
-                  </h4>
-                  <p className="text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider">
-                    Super Admin
-                  </p>
+              </button>
+            ) : (
+              <button
+                onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-[var(--card-bg)] border border-transparent hover:border-[var(--card-border)] transition-all cursor-pointer text-left"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-[rgba(255,127,80,0.15)] border border-[rgba(255,127,80,0.3)] text-[#FF7F50] flex items-center justify-center font-bold text-sm flex-shrink-0">
+                    {profName ? profName.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase() : "AD"}
+                  </div>
+                  <div className="truncate w-32">
+                    <h4 className="text-sm font-bold text-[var(--foreground)] truncate">{profName || "Admin User"}</h4>
+                    <p className="text-[10px] font-medium text-[var(--muted)]">Super Admin</p>
+                  </div>
                 </div>
-              </div>
-              <FaChevronUp className={`text-[var(--muted)] text-xs transition-transform duration-200 ${isUserMenuOpen ? "rotate-180" : ""}`} />
-            </button>
+                <FaChevronUp className={`text-[var(--muted)] text-xs transition-transform duration-200 ${isUserMenuOpen ? "rotate-180" : ""}`} />
+              </button>
+            )}
 
-            {/* User card popup menu */}
             {isUserMenuOpen && (
-              <div className="absolute bottom-16 left-0 right-0 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-2 shadow-2xl z-20 flex flex-col gap-1 w-full animate-fade-in">
+              <div className={`absolute ${isSidebarCollapsed ? "left-full ml-2 bottom-0" : "bottom-[68px] left-0 right-0"} bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-2 shadow-2xl z-20 flex flex-col gap-1 w-52 animate-fade-in`}>
                 <div className="px-3 py-1.5 text-xs text-[var(--muted)] border-b border-[var(--card-border)] truncate font-semibold mb-1">
                   {session.user.email}
                 </div>
@@ -694,30 +976,49 @@ export default function AdminPage() {
           </div>
         </aside>
 
-        {/* Content Panel */}
-        <main className="flex-1 p-6 sm:p-8 md:p-10 max-w-6xl mx-auto w-full">
-          {/* Tab Header */}
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8 pb-6 border-b border-[var(--card-border)]">
-            <div>
-              <h1 className="text-2xl font-black uppercase tracking-wider text-[var(--foreground)]">
-                {activeTab === "profile" ? "Hero & Bio Settings" : `Manage ${activeTab}`}
-              </h1>
-              <p className="text-[var(--muted)] text-sm mt-1">
-                {activeTab === "profile" 
-                  ? "Configure your personal information, hero titles, descriptions, and dynamic image."
-                  : `Add, update, or remove your portfolio's ${activeTab} dynamic entries.`
-                }
-              </p>
-            </div>
-
-            {activeTab !== "profile" && (
+        {/* Mobile Tab Navigation */}
+        <nav className="md:hidden flex items-center gap-2 p-3 overflow-x-auto border-b border-[var(--card-border)] bg-[var(--card-bg)]/20 no-scrollbar flex-shrink-0">
+          {(
+            [
+              { id: "profile", label: "Hero", icon: FaUserCog },
+              { id: "projects", label: "Projects", icon: FaFolder },
+              { id: "certifications", label: "Certs", icon: FaCertificate },
+              { id: "seminars", label: "Seminars", icon: FaChalkboardTeacher },
+              { id: "skills", label: "Skills", icon: FaCode },
+            ] as const
+          ).map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
               <button
-                onClick={() => openModal()}
-                className="flex items-center gap-2 bg-[#FF7F50] hover:bg-[#ff6a35] text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-lg"
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap cursor-pointer flex-shrink-0 transition-all ${
+                  isActive ? "bg-[#FF7F50] text-white shadow-md" : "text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--card-bg)]"
+                }`}
               >
-                <FaPlus /> Add New Entry
+                <Icon className="text-sm" /> {tab.label}
               </button>
-            )}
+            );
+          })}
+        </nav>
+
+        {/* Content Panel */}
+        <main className="flex-1 p-5 sm:p-7 md:p-10 min-w-0 overflow-x-hidden">
+          {/* Tab Header */}
+          <div className="mb-7">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[var(--foreground)]">
+              {activeTab === "profile" ? "Hero & Bio Settings" :
+               activeTab === "projects" ? "Manage Projects" :
+               activeTab === "certifications" ? "Manage Certifications" :
+               activeTab === "seminars" ? "Manage Seminars" : "Manage Skills"}
+            </h1>
+            <p className="text-[var(--muted)] text-sm mt-1.5">
+              {activeTab === "profile"
+                ? "Configure your personal information, hero titles, descriptions, and dynamic image."
+                : `Add, update, or remove your portfolio's ${activeTab} dynamic entries.`
+              }
+            </p>
           </div>
 
           {/* Loader */}
@@ -727,52 +1028,35 @@ export default function AdminPage() {
             </div>
           ) : (
             <div className="space-y-6">
-              
-              {/* PROFILE SETTINGS TAB VIEW */}
+
+              {/* ── PROFILE SETTINGS ─────────────────────────────── */}
               {activeTab === "profile" && (
                 <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-6 sm:p-8 shadow-xl">
                   <form onSubmit={handleSaveProfile} className="space-y-6">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                       <div className="space-y-2">
-                        <label className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Full Name</label>
-                        <input
-                          type="text"
-                          value={profName}
-                          onChange={(e) => setProfName(e.target.value)}
+                        <label className="text-sm font-medium text-[var(--foreground)]/80">Full Name</label>
+                        <input type="text" value={profName} onChange={(e) => setProfName(e.target.value)}
                           className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-3 px-4 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm transition-all"
-                          placeholder="e.g. Christian Dela Cruz"
-                          required
-                        />
+                          placeholder="e.g. Christian Dela Cruz" required />
                       </div>
-
                       <div className="space-y-2">
-                        <label className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Hero Title / Role</label>
-                        <input
-                          type="text"
-                          value={profTitle}
-                          onChange={(e) => setProfTitle(e.target.value)}
+                        <label className="text-sm font-medium text-[var(--foreground)]/80">Hero Title / Role</label>
+                        <input type="text" value={profTitle} onChange={(e) => setProfTitle(e.target.value)}
                           className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-3 px-4 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm transition-all"
-                          placeholder="e.g. Information Technology Specialist"
-                          required
-                        />
+                          placeholder="e.g. Information Technology Specialist" required />
                       </div>
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Hero Biography Description</label>
-                      <textarea
-                        value={profDesc}
-                        onChange={(e) => setProfDesc(e.target.value)}
-                        rows={4}
+                      <label className="text-sm font-medium text-[var(--foreground)]/80">Hero Biography Description</label>
+                      <textarea value={profDesc} onChange={(e) => setProfDesc(e.target.value)} rows={4}
                         className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-3 px-4 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm transition-all leading-relaxed"
-                        placeholder="Explain who you are and your fields of expertise..."
-                        required
-                      />
+                        placeholder="Explain who you are and your fields of expertise..." required />
                     </div>
 
-                    {/* Hero Profile Image Upload */}
                     <div className="space-y-2">
-                      <label className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider block">Hero Profile Image</label>
+                      <label className="text-sm font-medium text-[var(--foreground)]/80 block">Hero Profile Image</label>
                       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
                         <div className="relative w-24 h-24 rounded-full overflow-hidden border-2 border-[#FF7F50] bg-[var(--background)] flex-shrink-0">
                           {profImageUrl ? (
@@ -781,32 +1065,18 @@ export default function AdminPage() {
                             <div className="w-full h-full flex items-center justify-center text-xs text-[var(--muted)]">No Image</div>
                           )}
                         </div>
-                        
                         <div className="flex-1 w-full space-y-2">
                           <div className="flex gap-2">
-                            <input
-                              type="text"
-                              placeholder="Paste picture URL or upload a file"
-                              value={profImageUrl}
+                            <input type="text" placeholder="Paste picture URL or upload a file" value={profImageUrl}
                               onChange={(e) => setProfImageUrl(e.target.value)}
-                              className="flex-1 bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => profileImageInputRef.current?.click()}
-                              disabled={isUploading}
-                              className="bg-[var(--card-bg)] hover:bg-[var(--card-border)] border border-[var(--card-border)] px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2 cursor-pointer disabled:opacity-50 text-[var(--foreground)]"
-                            >
+                              className="flex-1 bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm" />
+                            <button type="button" onClick={() => profileImageInputRef.current?.click()} disabled={isUploading}
+                              className="bg-[var(--card-bg)] hover:bg-[var(--card-border)] border border-[var(--card-border)] px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2 cursor-pointer disabled:opacity-50 text-[var(--foreground)]">
                               {isUploading ? <FaSpinner className="animate-spin" /> : <FaUpload />} Upload
                             </button>
                           </div>
-                          <input
-                            type="file"
-                            ref={profileImageInputRef}
-                            className="hidden"
-                            accept="image/*"
-                            onChange={(e) => handleImageUpload(e, setProfImageUrl)}
-                          />
+                          <input type="file" ref={profileImageInputRef} className="hidden" accept="image/*"
+                            onChange={(e) => handleImageUpload(e, setProfImageUrl)} />
                           <p className="text-[var(--muted)] text-[10px] flex items-center gap-1.5">
                             <FaInfoCircle /> Drag-and-drop support: Files are uploaded directly to your Supabase cloud Storage bucket.
                           </p>
@@ -814,38 +1084,23 @@ export default function AdminPage() {
                       </div>
                     </div>
 
-                    {/* Resume PDF Upload */}
                     <div className="space-y-2">
-                      <label className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider block">Resume Document (PDF)</label>
+                      <label className="text-sm font-medium text-[var(--foreground)]/80 block">Resume Document (PDF)</label>
                       <div className="flex gap-2">
-                        <input
-                          type="text"
-                          placeholder="Paste PDF link or upload a file"
-                          value={profResumeUrl}
+                        <input type="text" placeholder="Paste PDF link or upload a file" value={profResumeUrl}
                           onChange={(e) => setProfResumeUrl(e.target.value)}
-                          className="flex-1 bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => resumeInputRef.current?.click()}
-                          disabled={isUploading}
-                          className="bg-[var(--card-bg)] hover:bg-[var(--card-border)] border border-[var(--card-border)] px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2 cursor-pointer disabled:opacity-50 text-[var(--foreground)]"
-                        >
+                          className="flex-1 bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm" />
+                        <button type="button" onClick={() => resumeInputRef.current?.click()} disabled={isUploading}
+                          className="bg-[var(--card-bg)] hover:bg-[var(--card-border)] border border-[var(--card-border)] px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2 cursor-pointer disabled:opacity-50 text-[var(--foreground)]">
                           {isUploading ? <FaSpinner className="animate-spin" /> : <FaUpload />} Upload
                         </button>
                       </div>
-                      <input
-                        type="file"
-                        ref={resumeInputRef}
-                        className="hidden"
-                        accept="application/pdf"
-                        onChange={(e) => handleImageUpload(e, setProfResumeUrl)}
-                      />
+                      <input type="file" ref={resumeInputRef} className="hidden" accept="application/pdf"
+                        onChange={(e) => handleImageUpload(e, setProfResumeUrl)} />
                     </div>
 
-                    {/* Navbar Logo Image Upload */}
                     <div className="space-y-2">
-                      <label className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider block">Navbar Logo / Icon Image</label>
+                      <label className="text-sm font-medium text-[var(--foreground)]/80 block">Navbar Logo / Icon Image</label>
                       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
                         <div className="relative w-16 h-16 rounded-xl overflow-hidden border border-[var(--card-border)] bg-[var(--background)] flex-shrink-0 flex items-center justify-center p-2">
                           {profLogoImageUrl ? (
@@ -854,37 +1109,22 @@ export default function AdminPage() {
                             <div className="w-full h-full flex items-center justify-center text-xs text-[var(--muted)]">No Logo</div>
                           )}
                         </div>
-                        
                         <div className="flex-1 w-full space-y-2">
                           <div className="flex gap-2">
-                            <input
-                              type="text"
-                              placeholder="Paste logo image URL or upload a file"
-                              value={profLogoImageUrl}
+                            <input type="text" placeholder="Paste logo image URL or upload a file" value={profLogoImageUrl}
                               onChange={(e) => setProfLogoImageUrl(e.target.value)}
-                              className="flex-1 bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => logoImageInputRef.current?.click()}
-                              disabled={isUploading}
-                              className="bg-[var(--card-bg)] hover:bg-[var(--card-border)] border border-[var(--card-border)] px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2 cursor-pointer disabled:opacity-50 text-[var(--foreground)]"
-                            >
+                              className="flex-1 bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm" />
+                            <button type="button" onClick={() => logoImageInputRef.current?.click()} disabled={isUploading}
+                              className="bg-[var(--card-bg)] hover:bg-[var(--card-border)] border border-[var(--card-border)] px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2 cursor-pointer disabled:opacity-50 text-[var(--foreground)]">
                               {isUploading ? <FaSpinner className="animate-spin" /> : <FaUpload />} Upload
                             </button>
                           </div>
-                          <input
-                            type="file"
-                            ref={logoImageInputRef}
-                            className="hidden"
-                            accept="image/*"
-                            onChange={(e) => handleImageUpload(e, setProfLogoImageUrl)}
-                          />
+                          <input type="file" ref={logoImageInputRef} className="hidden" accept="image/*"
+                            onChange={(e) => handleImageUpload(e, setProfLogoImageUrl)} />
                         </div>
                       </div>
                     </div>
 
-                    {/* Database migration warning */}
                     <div className="p-4 rounded-xl border border-yellow-500/20 bg-yellow-500/5 text-yellow-600 dark:text-yellow-400 text-xs leading-relaxed space-y-1.5">
                       <p className="font-semibold flex items-center gap-1.5">
                         <FaInfoCircle /> First-Time Setup: Database Action Required
@@ -898,11 +1138,8 @@ export default function AdminPage() {
                     </div>
 
                     <div className="flex justify-end pt-4 border-t border-[var(--card-border)]">
-                      <button
-                        type="submit"
-                        disabled={isSavingProfile}
-                        className="bg-[#FF7F50] hover:bg-[#ff6a35] text-white px-8 py-3 rounded-xl font-semibold text-sm transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-lg disabled:opacity-50 flex items-center gap-2"
-                      >
+                      <button type="submit" disabled={isSavingProfile}
+                        className="bg-[#FF7F50] hover:bg-[#ff6a35] text-white px-8 py-3 rounded-xl font-semibold text-sm transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-lg disabled:opacity-50 flex items-center gap-2">
                         {isSavingProfile ? <FaSpinner className="animate-spin" /> : "Save Profile Settings"}
                       </button>
                     </div>
@@ -910,245 +1147,270 @@ export default function AdminPage() {
                 </div>
               )}
 
-              {/* DYNAMIC LIST TABLES FOR OTHER TABS */}
+              {/* ── DATA TABLES ──────────────────────────────────── */}
               {activeTab !== "profile" && (
-                <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl overflow-hidden shadow-xl">
+                <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl overflow-hidden shadow-2xl">
+
+                  {/* Toolbar */}
+                  <div className="px-5 py-4 border-b border-[var(--card-border)] flex flex-col sm:flex-row items-start sm:items-center gap-3 bg-[var(--background)]/30">
+                    {/* Search */}
+                    <div className="relative w-full sm:w-64">
+                      <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted)] text-xs pointer-events-none" />
+                      <input
+                        type="text"
+                        placeholder="Search entries..."
+                        value={searchQuery}
+                        onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                        className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2 pl-8 pr-3 text-sm text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] transition-colors placeholder:text-[var(--muted)]"
+                      />
+                    </div>
+
+                    {/* Status filter – projects only */}
+                    {activeTab === "projects" && (
+                      <select
+                        value={filterValue}
+                        onChange={(e) => { setFilterValue(e.target.value); setCurrentPage(1); }}
+                        className="bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2 px-3 text-sm text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] cursor-pointer transition-colors"
+                      >
+                        <option value="all">All Statuses</option>
+                        <option value="completed">Completed</option>
+                        <option value="in-progress">In Progress</option>
+                        <option value="planned">Planned</option>
+                      </select>
+                    )}
+
+                    {/* Count + Add */}
+                    <div className="flex items-center gap-3 sm:ml-auto w-full sm:w-auto justify-between sm:justify-end">
+                      <span className="text-xs text-[var(--muted)] font-medium">
+                        {filteredData.length} {filteredData.length === 1 ? "entry" : "entries"}
+                      </span>
+                      <button
+                        onClick={() => openModal()}
+                        className="flex items-center gap-2 bg-[#FF7F50] hover:bg-[#ff6a35] text-white px-4 py-2 rounded-xl font-semibold text-sm transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-lg shadow-[#FF7F50]/20 whitespace-nowrap"
+                      >
+                        <FaPlus size={11} /> Add New Entry
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* ── Projects Table ── */}
                   {activeTab === "projects" && (
                     <div className="overflow-x-auto">
                       <table className="w-full border-collapse text-left">
                         <thead>
-                          <tr className="border-b border-[var(--card-border)] bg-[var(--background)]/50 text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
-                            <th className="px-6 py-4">Title</th>
-                            <th className="px-6 py-4">Status</th>
-                            <th className="px-6 py-4">Tech Stack</th>
-                            <th className="px-6 py-4 text-right">Actions</th>
+                          <tr className="border-b border-[var(--card-border)] bg-[var(--background)]/60 text-[10px] font-bold text-[var(--muted)] uppercase tracking-wider">
+                            <th className="px-6 py-3.5">Title</th>
+                            <th className="px-6 py-3.5">Status</th>
+                            <th className="px-6 py-3.5">Tech Stack</th>
+                            <th className="px-6 py-3.5 w-28 text-center">Actions</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[var(--card-border)] text-sm">
-                          {projects.map((proj) => (
-                            <tr key={proj.id} className="hover:bg-[var(--background)]/20 transition-colors">
-                              <td className="px-6 py-4 font-semibold text-[var(--foreground)]">{proj.title}</td>
+                          {paginatedData.map((proj) => (
+                            <tr key={proj.id} className="hover:bg-[var(--card-border)]/25 transition-colors duration-150">
+                              <td className="px-6 py-4 font-semibold text-[var(--foreground)] max-w-[200px]">
+                                <span className="block truncate">{proj.title}</span>
+                              </td>
                               <td className="px-6 py-4">
-                                <span
-                                  className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border"
-                                  style={{
-                                    color:
-                                      proj.status === "completed"
-                                        ? "#22c55e"
-                                        : proj.status === "in-progress"
-                                        ? "#f59e0b"
-                                        : "#9ca3af",
-                                    backgroundColor:
-                                      proj.status === "completed"
-                                        ? "rgba(34,197,94,0.1)"
-                                        : proj.status === "in-progress"
-                                        ? "rgba(245,158,11,0.1)"
-                                        : "rgba(156,163,175,0.1)",
-                                    borderColor:
-                                      proj.status === "completed"
-                                        ? "rgba(34,197,94,0.2)"
-                                        : proj.status === "in-progress"
-                                        ? "rgba(245,158,11,0.2)"
-                                        : "rgba(156,163,175,0.2)",
-                                  }}
-                                >
-                                  {proj.status}
-                                </span>
+                                <div className="flex items-center">
+                                  <span
+                                    className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-bold border capitalize"
+                                    style={{
+                                      color: proj.status === "completed" ? "#22c55e" : proj.status === "in-progress" ? "#f59e0b" : "#9ca3af",
+                                      backgroundColor: proj.status === "completed" ? "rgba(34,197,94,0.1)" : proj.status === "in-progress" ? "rgba(245,158,11,0.1)" : "rgba(156,163,175,0.1)",
+                                      borderColor: proj.status === "completed" ? "rgba(34,197,94,0.25)" : proj.status === "in-progress" ? "rgba(245,158,11,0.25)" : "rgba(156,163,175,0.25)",
+                                    }}
+                                  >
+                                    {proj.status}
+                                  </span>
+                                </div>
                               </td>
-                              <td className="px-6 py-4 text-[var(--muted)]">
-                                {proj.tech?.slice(0, 3).join(", ")}
-                                {proj.tech?.length > 3 && "..."}
+                              <td className="px-6 py-4 text-[var(--muted)] max-w-[200px]">
+                                <span className="block truncate">{proj.tech?.slice(0, 3).join(", ")}{proj.tech?.length > 3 && " ..."}</span>
                               </td>
-                              <td className="px-6 py-4 text-right space-x-2 whitespace-nowrap">
-                                <button
-                                  onClick={() => openModal(proj)}
-                                  className="p-2 text-blue-400 hover:bg-[var(--background)]/40 rounded-lg transition-colors cursor-pointer"
-                                  title="Edit"
-                                >
-                                  <FaEdit />
-                                </button>
-                                <button
-                                  onClick={() => handleDelete(proj.id)}
-                                  className="p-2 text-red-400 hover:bg-[var(--background)]/40 rounded-lg transition-colors cursor-pointer"
-                                  title="Delete"
-                                >
-                                  <FaTrash />
-                                </button>
+                              <td className="px-6 py-4 w-28">
+                                <div className="flex items-center justify-center gap-3">
+                                  <button onClick={() => openModal(proj)} className="p-2 text-blue-400 hover:text-blue-300 hover:bg-blue-400/10 rounded-lg transition-all cursor-pointer" title="Edit"><FaEdit size={13} /></button>
+                                  <button onClick={() => handleDelete(proj.id)} className="p-2 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-lg transition-all cursor-pointer" title="Delete"><FaTrash size={13} /></button>
+                                </div>
                               </td>
                             </tr>
                           ))}
-                          {projects.length === 0 && (
-                            <tr>
-                              <td colSpan={4} className="text-center py-12 text-[var(--muted)]">
-                                No projects found. Add one to get started!
-                              </td>
-                            </tr>
+                          {paginatedData.length === 0 && (
+                            <tr><td colSpan={4}>{emptyState}</td></tr>
                           )}
                         </tbody>
                       </table>
                     </div>
                   )}
 
+                  {/* ── Certifications Table ── */}
                   {activeTab === "certifications" && (
                     <div className="overflow-x-auto">
                       <table className="w-full border-collapse text-left">
                         <thead>
-                          <tr className="border-b border-[var(--card-border)] bg-[var(--background)]/50 text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
-                            <th className="px-6 py-4">Badge</th>
-                            <th className="px-6 py-4">Name</th>
-                            <th className="px-6 py-4">Issuer</th>
-                            <th className="px-6 py-4">Date</th>
-                            <th className="px-6 py-4 text-right">Actions</th>
+                          <tr className="border-b border-[var(--card-border)] bg-[var(--background)]/60 text-[10px] font-bold text-[var(--muted)] uppercase tracking-wider">
+                            <th className="px-6 py-3.5 w-20">Badge</th>
+                            <th className="px-6 py-3.5">Name</th>
+                            <th className="px-6 py-3.5">Issuer</th>
+                            <th className="px-6 py-3.5">Date</th>
+                            <th className="px-6 py-3.5 w-28 text-center">Actions</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[var(--card-border)] text-sm">
-                          {certifications.map((cert) => (
-                            <tr key={cert.id} className="hover:bg-[var(--background)]/20 transition-colors">
+                          {paginatedData.map((cert) => (
+                            <tr key={cert.id} className="hover:bg-[var(--card-border)]/25 transition-colors duration-150">
                               <td className="px-6 py-4">
                                 {cert.badge_url ? (
-                                  <img
-                                    src={cert.badge_url}
-                                    alt={cert.name}
-                                    className="w-10 h-10 object-contain rounded-md border border-[var(--card-border)] p-0.5 bg-[var(--background)]"
-                                  />
+                                  <img src={cert.badge_url} alt={cert.name} className="w-10 h-10 object-contain rounded-md border border-[var(--card-border)] p-0.5 bg-[var(--background)]" />
                                 ) : (
-                                  <span className="text-xs text-[var(--muted)]">No image</span>
+                                  <span className="text-[var(--muted)] text-lg">—</span>
                                 )}
                               </td>
-                              <td className="px-6 py-4 font-semibold text-[var(--foreground)]">{cert.name}</td>
+                              <td className="px-6 py-4 font-semibold text-[var(--foreground)] max-w-[200px]">
+                                <span className="block truncate">{cert.name}</span>
+                              </td>
                               <td className="px-6 py-4 text-[var(--muted)]">{cert.issuer}</td>
-                              <td className="px-6 py-4 text-[var(--muted)]">{cert.date}</td>
-                              <td className="px-6 py-4 text-right space-x-2 whitespace-nowrap">
-                                <button
-                                  onClick={() => openModal(cert)}
-                                  className="p-2 text-blue-400 hover:bg-[var(--background)]/40 rounded-lg transition-colors cursor-pointer"
-                                >
-                                  <FaEdit />
-                                </button>
-                                <button
-                                  onClick={() => handleDelete(cert.id)}
-                                  className="p-2 text-red-400 hover:bg-[var(--background)]/40 rounded-lg transition-colors cursor-pointer"
-                                >
-                                  <FaTrash />
-                                </button>
+                              <td className="px-6 py-4 text-[var(--muted)] whitespace-nowrap">{cert.date}</td>
+                              <td className="px-6 py-4 w-28">
+                                <div className="flex items-center justify-center gap-3">
+                                  <button onClick={() => openModal(cert)} className="p-2 text-blue-400 hover:text-blue-300 hover:bg-blue-400/10 rounded-lg transition-all cursor-pointer" title="Edit"><FaEdit size={13} /></button>
+                                  <button onClick={() => handleDelete(cert.id)} className="p-2 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-lg transition-all cursor-pointer" title="Delete"><FaTrash size={13} /></button>
+                                </div>
                               </td>
                             </tr>
                           ))}
-                          {certifications.length === 0 && (
-                            <tr>
-                              <td colSpan={5} className="text-center py-12 text-[var(--muted)]">
-                                No certifications found. Add one to get started!
-                              </td>
-                            </tr>
+                          {paginatedData.length === 0 && (
+                            <tr><td colSpan={5}>{emptyState}</td></tr>
                           )}
                         </tbody>
                       </table>
                     </div>
                   )}
 
+                  {/* ── Seminars Table ── */}
                   {activeTab === "seminars" && (
                     <div className="overflow-x-auto">
                       <table className="w-full border-collapse text-left">
                         <thead>
-                          <tr className="border-b border-[var(--card-border)] bg-[var(--background)]/50 text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
-                            <th className="px-6 py-4">Image</th>
-                            <th className="px-6 py-4">Title</th>
-                            <th className="px-6 py-4">Organizer</th>
-                            <th className="px-6 py-4">Date</th>
-                            <th className="px-6 py-4 text-right">Actions</th>
+                          <tr className="border-b border-[var(--card-border)] bg-[var(--background)]/60 text-[10px] font-bold text-[var(--muted)] uppercase tracking-wider">
+                            <th className="px-6 py-3.5 w-24">Image</th>
+                            <th className="px-6 py-3.5">Title</th>
+                            <th className="px-6 py-3.5">Organizer</th>
+                            <th className="px-6 py-3.5">Date</th>
+                            <th className="px-6 py-3.5 w-28 text-center">Actions</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[var(--card-border)] text-sm">
-                          {seminars.map((sem) => (
-                            <tr key={sem.id} className="hover:bg-[var(--background)]/20 transition-colors">
+                          {paginatedData.map((sem) => (
+                            <tr key={sem.id} className="hover:bg-[var(--card-border)]/25 transition-colors duration-150">
                               <td className="px-6 py-4">
                                 {sem.image_url ? (
-                                  <img
-                                    src={sem.image_url}
-                                    alt={sem.title}
-                                    className="w-16 h-10 object-cover rounded-md border border-[var(--card-border)]"
-                                  />
+                                  <img src={sem.image_url} alt={sem.title} className="w-16 h-10 object-cover rounded-md border border-[var(--card-border)]" />
                                 ) : (
-                                  <span className="text-xs text-[var(--muted)]">No image</span>
+                                  <span className="text-[var(--muted)] text-lg">—</span>
                                 )}
                               </td>
-                              <td className="px-6 py-4 font-semibold text-[var(--foreground)]">{sem.title}</td>
+                              <td className="px-6 py-4 font-semibold text-[var(--foreground)] max-w-[200px]">
+                                <span className="block truncate">{sem.title}</span>
+                              </td>
                               <td className="px-6 py-4 text-[var(--muted)]">{sem.organizer}</td>
-                              <td className="px-6 py-4 text-[var(--muted)]">{sem.date}</td>
-                              <td className="px-6 py-4 text-right space-x-2 whitespace-nowrap">
-                                <button
-                                  onClick={() => openModal(sem)}
-                                  className="p-2 text-blue-400 hover:bg-[var(--background)]/40 rounded-lg transition-colors cursor-pointer"
-                                >
-                                  <FaEdit />
-                                </button>
-                                <button
-                                  onClick={() => handleDelete(sem.id)}
-                                  className="p-2 text-red-400 hover:bg-[var(--background)]/40 rounded-lg transition-colors cursor-pointer"
-                                >
-                                  <FaTrash />
-                                </button>
+                              <td className="px-6 py-4 text-[var(--muted)] whitespace-nowrap">{sem.date}</td>
+                              <td className="px-6 py-4 w-28">
+                                <div className="flex items-center justify-center gap-3">
+                                  <button onClick={() => openModal(sem)} className="p-2 text-blue-400 hover:text-blue-300 hover:bg-blue-400/10 rounded-lg transition-all cursor-pointer" title="Edit"><FaEdit size={13} /></button>
+                                  <button onClick={() => handleDelete(sem.id)} className="p-2 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-lg transition-all cursor-pointer" title="Delete"><FaTrash size={13} /></button>
+                                </div>
                               </td>
                             </tr>
                           ))}
-                          {seminars.length === 0 && (
-                            <tr>
-                              <td colSpan={5} className="text-center py-12 text-[var(--muted)]">
-                                No seminars found. Add one to get started!
-                              </td>
-                            </tr>
+                          {paginatedData.length === 0 && (
+                            <tr><td colSpan={5}>{emptyState}</td></tr>
                           )}
                         </tbody>
                       </table>
                     </div>
                   )}
 
+                  {/* ── Skills Table ── */}
                   {activeTab === "skills" && (
                     <div className="overflow-x-auto">
                       <table className="w-full border-collapse text-left">
                         <thead>
-                          <tr className="border-b border-[var(--card-border)] bg-[var(--background)]/50 text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
-                            <th className="px-6 py-4">Category</th>
-                            <th className="px-6 py-4">Skills</th>
-                            <th className="px-6 py-4 text-right">Actions</th>
+                          <tr className="border-b border-[var(--card-border)] bg-[var(--background)]/60 text-[10px] font-bold text-[var(--muted)] uppercase tracking-wider">
+                            <th className="px-6 py-3.5">Category</th>
+                            <th className="px-6 py-3.5">Skills</th>
+                            <th className="px-6 py-3.5 w-28 text-center">Actions</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[var(--card-border)] text-sm">
-                          {skills.map((sk) => (
-                            <tr key={sk.id} className="hover:bg-[var(--background)]/20 transition-colors">
-                              <td className="px-6 py-4 font-semibold text-[var(--foreground)] whitespace-nowrap">
-                                {sk.category}
+                          {paginatedData.map((sk) => (
+                            <tr key={sk.id} className="hover:bg-[var(--card-border)]/25 transition-colors duration-150">
+                              <td className="px-6 py-4 font-semibold text-[var(--foreground)] whitespace-nowrap">{sk.category}</td>
+                              <td className="px-6 py-4">
+                                <div className="flex flex-wrap gap-1.5">
+                                  {sk.items?.slice(0, 6).map((item: string, i: number) => (
+                                    <span key={i} className="px-2 py-0.5 bg-[var(--background)] border border-[var(--card-border)] rounded-md text-[10px] font-medium text-[var(--foreground)]/70">{item}</span>
+                                  ))}
+                                  {sk.items?.length > 6 && (
+                                    <span className="px-2 py-0.5 text-[10px] text-[var(--muted)]">+{sk.items.length - 6} more</span>
+                                  )}
+                                </div>
                               </td>
-                              <td className="px-6 py-4 text-[var(--muted)]">
-                                {sk.items?.join(", ")}
-                              </td>
-                              <td className="px-6 py-4 text-right space-x-2 whitespace-nowrap">
-                                <button
-                                  onClick={() => openModal(sk)}
-                                  className="p-2 text-blue-400 hover:bg-[var(--background)]/40 rounded-lg transition-colors cursor-pointer"
-                                >
-                                  <FaEdit />
-                                </button>
-                                <button
-                                  onClick={() => handleDelete(sk.id)}
-                                  className="p-2 text-red-400 hover:bg-[var(--background)]/40 rounded-lg transition-colors cursor-pointer"
-                                >
-                                  <FaTrash />
-                                </button>
+                              <td className="px-6 py-4 w-28">
+                                <div className="flex items-center justify-center gap-3">
+                                  <button onClick={() => openModal(sk)} className="p-2 text-blue-400 hover:text-blue-300 hover:bg-blue-400/10 rounded-lg transition-all cursor-pointer" title="Edit"><FaEdit size={13} /></button>
+                                  <button onClick={() => handleDelete(sk.id)} className="p-2 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-lg transition-all cursor-pointer" title="Delete"><FaTrash size={13} /></button>
+                                </div>
                               </td>
                             </tr>
                           ))}
-                          {skills.length === 0 && (
-                            <tr>
-                              <td colSpan={3} className="text-center py-12 text-[var(--muted)]">
-                                No skill categories found. Add one!
-                              </td>
-                            </tr>
+                          {paginatedData.length === 0 && (
+                            <tr><td colSpan={3}>{emptyState}</td></tr>
                           )}
                         </tbody>
                       </table>
                     </div>
                   )}
+
+                  {/* Pagination Footer */}
+                  {filteredData.length > ITEMS_PER_PAGE && (
+                    <div className="px-6 py-4 border-t border-[var(--card-border)] bg-[var(--background)]/30 flex flex-col sm:flex-row items-center justify-between gap-3">
+                      <p className="text-xs text-[var(--muted)]">
+                        Showing {Math.min((currentPage - 1) * ITEMS_PER_PAGE + 1, filteredData.length)}&ndash;{Math.min(currentPage * ITEMS_PER_PAGE, filteredData.length)} of {filteredData.length} entries
+                      </p>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                          disabled={currentPage === 1}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-[var(--card-border)] bg-[var(--background)] text-[var(--muted)] hover:text-[var(--foreground)] hover:border-[#FF7F50] disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+                        >
+                          &larr; Prev
+                        </button>
+                        {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+                          <button
+                            key={p}
+                            onClick={() => setCurrentPage(p)}
+                            className={`w-8 h-8 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                              currentPage === p
+                                ? "bg-[#FF7F50] text-white shadow-sm shadow-[#FF7F50]/30"
+                                : "border border-[var(--card-border)] bg-[var(--background)] text-[var(--muted)] hover:text-[var(--foreground)] hover:border-[#FF7F50]"
+                            }`}
+                          >
+                            {p}
+                          </button>
+                        ))}
+                        <button
+                          onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                          disabled={currentPage === totalPages}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-[var(--card-border)] bg-[var(--background)] text-[var(--muted)] hover:text-[var(--foreground)] hover:border-[#FF7F50] disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+                        >
+                          Next &rarr;
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                 </div>
               )}
             </div>
@@ -1156,167 +1418,102 @@ export default function AdminPage() {
         </main>
       </div>
 
-      {/* CRUD EDITOR DRAWER (ONLY FOR PROJECTS, CERTS, SEMINARS, SKILLS) */}
+      {/* ── CRUD EDITOR DRAWER ──────────────────────────── */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 overflow-hidden flex justify-end">
-          {/* Backdrop (closes drawer when clicked) */}
           <div
             className="absolute inset-0 bg-black/60 backdrop-blur-xs transition-opacity duration-300 animate-fade-in"
             onClick={closeModal}
           />
-
-          {/* Drawer Form Panel */}
           <form
             onSubmit={handleSave}
             className="relative w-full max-w-xl bg-[var(--card-bg)] border-l border-[var(--card-border)] h-full shadow-2xl flex flex-col z-10 animate-slide-in-right text-left"
           >
-            {/* Drawer Header */}
             <div className="px-6 py-5 border-b border-[var(--card-border)] flex items-center justify-between bg-[var(--card-bg)]">
               <h2 className="text-lg font-bold text-[var(--foreground)]">
                 {editingItem ? "Edit" : "Add New"} {activeTab.slice(0, -1)}
               </h2>
-              <button
-                type="button"
-                onClick={closeModal}
-                className="text-[var(--muted)] hover:text-[var(--foreground)] text-lg p-2 rounded-lg cursor-pointer transition-colors hover:bg-[var(--background)] flex items-center justify-center"
-              >
+              <button type="button" onClick={closeModal}
+                className="text-[var(--muted)] hover:text-[var(--foreground)] text-lg p-2 rounded-lg cursor-pointer transition-colors hover:bg-[var(--background)] flex items-center justify-center">
                 <FaTimes />
               </button>
             </div>
 
-            {/* Scrollable Form Body */}
             <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-[var(--card-bg)]">
               {/* PROJECTS FORM */}
               {activeTab === "projects" && (
                 <>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <label className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Project Title</label>
-                      <input
-                        type="text"
-                        value={projTitle}
-                        onChange={(e) => setProjTitle(e.target.value)}
+                      <label className="text-sm font-medium text-[var(--foreground)]/80">Project Title</label>
+                      <input type="text" value={projTitle} onChange={(e) => setProjTitle(e.target.value)}
                         className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2.5 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm"
-                        placeholder="My Awesome App"
-                        required
-                      />
+                        placeholder="My Awesome App" required />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Status</label>
-                      <select
-                        value={projStatus}
-                        onChange={(e: any) => setProjStatus(e.target.value)}
-                        className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2.5 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm"
-                      >
+                      <label className="text-sm font-medium text-[var(--foreground)]/80">Status</label>
+                      <select value={projStatus} onChange={(e: any) => setProjStatus(e.target.value)}
+                        className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2.5 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm">
                         <option value="completed">Completed</option>
                         <option value="in-progress">In Progress</option>
                         <option value="planned">Planned</option>
                       </select>
                     </div>
                   </div>
-
                   <div className="space-y-2">
-                    <label className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Description</label>
-                    <textarea
-                      value={projDesc}
-                      onChange={(e) => setProjDesc(e.target.value)}
-                      rows={3}
+                    <label className="text-sm font-medium text-[var(--foreground)]/80">Description</label>
+                    <textarea value={projDesc} onChange={(e) => setProjDesc(e.target.value)} rows={3}
                       className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2.5 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm leading-relaxed"
-                      placeholder="Enter a brief project description"
-                      required
-                    />
+                      placeholder="Enter a brief project description" required />
                   </div>
-
                   <div className="space-y-2">
-                    <label className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
-                      Bullets Achievements (One item per line)
-                    </label>
-                    <textarea
-                      value={projBullets}
-                      onChange={(e) => setProjBullets(e.target.value)}
-                      rows={4}
+                    <label className="text-sm font-medium text-[var(--foreground)]/80">Bullets Achievements (One item per line)</label>
+                    <textarea value={projBullets} onChange={(e) => setProjBullets(e.target.value)} rows={4}
                       className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2.5 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm leading-relaxed"
-                      placeholder="Bullet point 1&#10;Bullet point 2&#10;Bullet point 3"
-                    />
+                      placeholder={"Bullet point 1\nBullet point 2\nBullet point 3"} />
                   </div>
-
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <label className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
-                        Tech Stack (Comma separated)
-                      </label>
-                      <input
-                        type="text"
-                        value={projTech}
-                        onChange={(e) => setProjTech(e.target.value)}
+                      <label className="text-sm font-medium text-[var(--foreground)]/80">Tech Stack (Comma separated)</label>
+                      <input type="text" value={projTech} onChange={(e) => setProjTech(e.target.value)}
                         className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2.5 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm"
-                        placeholder="React, Next.js, Tailwind, Supabase"
-                      />
+                        placeholder="React, Next.js, Tailwind, Supabase" />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Duration</label>
-                      <input
-                        type="text"
-                        value={projDuration}
-                        onChange={(e) => setProjDuration(e.target.value)}
+                      <label className="text-sm font-medium text-[var(--foreground)]/80">Duration</label>
+                      <input type="text" value={projDuration} onChange={(e) => setProjDuration(e.target.value)}
                         className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2.5 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm"
-                        placeholder="Sept 2025 - Dec 2025"
-                      />
+                        placeholder="Sept 2025 - Dec 2025" />
                     </div>
                   </div>
-
                   <div className="space-y-2">
-                    <label className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">GitHub URL</label>
-                    <input
-                      type="text"
-                      value={projGithub}
-                      onChange={(e) => setProjGithub(e.target.value)}
+                    <label className="text-sm font-medium text-[var(--foreground)]/80">GitHub URL</label>
+                    <input type="text" value={projGithub} onChange={(e) => setProjGithub(e.target.value)}
                       className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2.5 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm"
-                      placeholder="https://github.com/username/project"
-                      required
-                    />
+                      placeholder="https://github.com/username/project" required />
                   </div>
-
                   <div className="space-y-2">
-                    <label className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider block">Screenshots</label>
+                    <label className="text-sm font-medium text-[var(--foreground)]/80 block">Screenshots</label>
                     <div className="flex gap-2">
-                      <input
-                        type="text"
-                        placeholder="Paste image URL or upload one"
+                      <input type="text" placeholder="Paste image URL or upload one"
                         value={projScreenshots.join(", ")}
-                        onChange={(e) =>
-                          setProjScreenshots(e.target.value.split(",").map((s) => s.trim()).filter(Boolean))
-                        }
-                        className="flex-1 bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2.5 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={isUploading}
-                        className="bg-[var(--card-bg)] hover:bg-[var(--card-border)] border border-[var(--card-border)] px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2 cursor-pointer disabled:opacity-50 text-[var(--foreground)]"
-                      >
+                        onChange={(e) => setProjScreenshots(e.target.value.split(",").map((s) => s.trim()).filter(Boolean))}
+                        className="flex-1 bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2.5 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm" />
+                      <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isUploading}
+                        className="bg-[var(--card-bg)] hover:bg-[var(--card-border)] border border-[var(--card-border)] px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2 cursor-pointer disabled:opacity-50 text-[var(--foreground)]">
                         {isUploading ? <FaSpinner className="animate-spin" /> : <FaUpload />} Upload
                       </button>
                     </div>
-                    <input
-                      type="file"
-                      ref={fileInputRef}
-                      className="hidden"
-                      accept="image/*"
-                      onChange={(e) =>
-                        handleImageUpload(e, (url) => setProjScreenshots((prev) => [...prev, url]))
-                      }
-                    />
+                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*"
+                      onChange={(e) => handleImageUpload(e, (url) => setProjScreenshots((prev) => [...prev, url]))} />
                     {projScreenshots.length > 0 && (
                       <div className="flex flex-wrap gap-2 mt-2">
                         {projScreenshots.map((url, idx) => (
                           <div key={idx} className="relative group rounded-md overflow-hidden border border-[var(--card-border)]">
                             <img src={url} alt="Screenshot preview" className="w-20 h-12 object-cover" />
-                            <button
-                              type="button"
+                            <button type="button"
                               onClick={() => setProjScreenshots((prev) => prev.filter((_, i) => i !== idx))}
-                              className="absolute top-0 right-0 bg-red-600 text-white rounded-bl-md p-1 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-xs"
-                            >
+                              className="absolute top-0 right-0 bg-red-600 text-white rounded-bl-md p-1 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-xs">
                               <FaTimes />
                             </button>
                           </div>
@@ -1331,84 +1528,49 @@ export default function AdminPage() {
               {activeTab === "certifications" && (
                 <>
                   <div className="space-y-2">
-                    <label className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Certification Name</label>
-                    <input
-                      type="text"
-                      value={certName}
-                      onChange={(e) => setCertName(e.target.value)}
+                    <label className="text-sm font-medium text-[var(--foreground)]/80">Certification Name</label>
+                    <input type="text" value={certName} onChange={(e) => setCertName(e.target.value)}
                       className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2.5 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm"
-                      placeholder="e.g. AWS Certified Solutions Architect"
-                      required
-                    />
+                      placeholder="e.g. AWS Certified Solutions Architect" required />
                   </div>
-
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <label className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Issuer</label>
-                      <input
-                        type="text"
-                        value={certIssuer}
-                        onChange={(e) => setCertIssuer(e.target.value)}
+                      <label className="text-sm font-medium text-[var(--foreground)]/80">Issuer</label>
+                      <input type="text" value={certIssuer} onChange={(e) => setCertIssuer(e.target.value)}
                         className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2.5 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm"
-                        placeholder="e.g. Amazon Web Services"
-                        required
-                      />
+                        placeholder="e.g. Amazon Web Services" required />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Date Earned</label>
-                      <input
-                        type="text"
-                        value={certDate}
-                        onChange={(e) => setCertDate(e.target.value)}
+                      <label className="text-sm font-medium text-[var(--foreground)]/80">Date Earned</label>
+                      <input type="text" value={certDate} onChange={(e) => setCertDate(e.target.value)}
                         className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2.5 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm"
-                        placeholder="e.g. October 2025"
-                        required
-                      />
+                        placeholder="e.g. October 2025" required />
                     </div>
                   </div>
-
                   <div className="space-y-2">
-                    <label className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider block">Badge Image</label>
+                    <label className="text-sm font-medium text-[var(--foreground)]/80 block">Badge Image</label>
                     <div className="flex gap-2">
-                      <input
-                        type="text"
-                        placeholder="Paste image URL or upload one"
-                        value={certBadgeUrl}
+                      <input type="text" placeholder="Paste image URL or upload one" value={certBadgeUrl}
                         onChange={(e) => setCertBadgeUrl(e.target.value)}
-                        className="flex-1 bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2.5 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={isUploading}
-                        className="bg-[var(--card-bg)] hover:bg-[var(--card-border)] border border-[var(--card-border)] px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2 cursor-pointer disabled:opacity-50 text-[var(--foreground)]"
-                      >
+                        className="flex-1 bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2.5 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm" />
+                      <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isUploading}
+                        className="bg-[var(--card-bg)] hover:bg-[var(--card-border)] border border-[var(--card-border)] px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2 cursor-pointer disabled:opacity-50 text-[var(--foreground)]">
                         {isUploading ? <FaSpinner className="animate-spin" /> : <FaUpload />} Upload
                       </button>
                     </div>
-                    <input
-                      type="file"
-                      ref={fileInputRef}
-                      className="hidden"
-                      accept="image/*"
-                      onChange={(e) => handleImageUpload(e, setCertBadgeUrl)}
-                    />
+                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*"
+                      onChange={(e) => handleImageUpload(e, setCertBadgeUrl)} />
                     {certBadgeUrl && (
                       <div className="mt-2">
                         <img src={certBadgeUrl} alt="Badge Preview" className="w-16 h-16 object-contain rounded-md border border-[var(--card-border)] p-1 bg-[var(--background)]" />
                       </div>
                     )}
                   </div>
-
                   <div className="space-y-2">
-                    <label className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Credly URL (Optional)</label>
-                    <input
-                      type="text"
-                      value={certCredlyUrl}
-                      onChange={(e) => setCertCredlyUrl(e.target.value)}
+                    <label className="text-sm font-medium text-[var(--foreground)]/80">Credly URL (Optional)</label>
+                    <input type="text" value={certCredlyUrl} onChange={(e) => setCertCredlyUrl(e.target.value)}
                       className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2.5 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm"
-                      placeholder="https://www.credly.com/badges/your-badge"
-                    />
+                      placeholder="https://www.credly.com/badges/your-badge" />
                   </div>
                 </>
               )}
@@ -1417,68 +1579,38 @@ export default function AdminPage() {
               {activeTab === "seminars" && (
                 <>
                   <div className="space-y-2">
-                    <label className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Seminar Title</label>
-                    <input
-                      type="text"
-                      value={semTitle}
-                      onChange={(e) => setSemTitle(e.target.value)}
+                    <label className="text-sm font-medium text-[var(--foreground)]/80">Seminar Title</label>
+                    <input type="text" value={semTitle} onChange={(e) => setSemTitle(e.target.value)}
                       className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2.5 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm"
-                      placeholder="e.g. Introduction to Generative AI"
-                      required
-                    />
+                      placeholder="e.g. Introduction to Generative AI" required />
                   </div>
-
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <label className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Organizer</label>
-                      <input
-                        type="text"
-                        value={semOrganizer}
-                        onChange={(e) => setSemOrganizer(e.target.value)}
+                      <label className="text-sm font-medium text-[var(--foreground)]/80">Organizer</label>
+                      <input type="text" value={semOrganizer} onChange={(e) => setSemOrganizer(e.target.value)}
                         className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2.5 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm"
-                        placeholder="e.g. Google Cloud Developer Group"
-                        required
-                      />
+                        placeholder="e.g. Google Cloud Developer Group" required />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Date</label>
-                      <input
-                        type="text"
-                        value={semDate}
-                        onChange={(e) => setSemDate(e.target.value)}
+                      <label className="text-sm font-medium text-[var(--foreground)]/80">Date</label>
+                      <input type="text" value={semDate} onChange={(e) => setSemDate(e.target.value)}
                         className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2.5 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm"
-                        placeholder="e.g. June 26, 2026"
-                        required
-                      />
+                        placeholder="e.g. June 26, 2026" required />
                     </div>
                   </div>
-
                   <div className="space-y-2">
-                    <label className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider block">Seminar Certificate/Image</label>
+                    <label className="text-sm font-medium text-[var(--foreground)]/80 block">Seminar Certificate/Image</label>
                     <div className="flex gap-2">
-                      <input
-                        type="text"
-                        placeholder="Paste image URL or upload one"
-                        value={semImageUrl}
+                      <input type="text" placeholder="Paste image URL or upload one" value={semImageUrl}
                         onChange={(e) => setSemImageUrl(e.target.value)}
-                        className="flex-1 bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2.5 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={isUploading}
-                        className="bg-[var(--card-bg)] hover:bg-[var(--card-border)] border border-[var(--card-border)] px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2 cursor-pointer disabled:opacity-50 text-[var(--foreground)]"
-                      >
+                        className="flex-1 bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2.5 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm" />
+                      <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isUploading}
+                        className="bg-[var(--card-bg)] hover:bg-[var(--card-border)] border border-[var(--card-border)] px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2 cursor-pointer disabled:opacity-50 text-[var(--foreground)]">
                         {isUploading ? <FaSpinner className="animate-spin" /> : <FaUpload />} Upload
                       </button>
                     </div>
-                    <input
-                      type="file"
-                      ref={fileInputRef}
-                      className="hidden"
-                      accept="image/*"
-                      onChange={(e) => handleImageUpload(e, setSemImageUrl)}
-                    />
+                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*"
+                      onChange={(e) => handleImageUpload(e, setSemImageUrl)} />
                     {semImageUrl && (
                       <div className="mt-2">
                         <img src={semImageUrl} alt="Seminar Preview" className="w-32 h-20 object-cover rounded-md border border-[var(--card-border)]" />
@@ -1492,53 +1624,31 @@ export default function AdminPage() {
               {activeTab === "skills" && (
                 <>
                   <div className="space-y-2">
-                    <label className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">Category Name</label>
-                    <input
-                      type="text"
-                      value={skillCategory}
-                      onChange={(e) => setSkillCategory(e.target.value)}
+                    <label className="text-sm font-medium text-[var(--foreground)]/80">Category Name</label>
+                    <input type="text" value={skillCategory} onChange={(e) => setSkillCategory(e.target.value)}
                       disabled={!!editingItem}
                       className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2.5 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm disabled:opacity-50"
-                      placeholder="e.g. Programming, Databases"
-                      required
-                    />
+                      placeholder="e.g. Programming, Databases" required />
                   </div>
-
                   <div className="space-y-2">
-                    <label className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
-                      Skills (Comma separated list)
-                    </label>
-                    <textarea
-                      value={skillItems}
-                      onChange={(e) => setSkillItems(e.target.value)}
-                      rows={4}
+                    <label className="text-sm font-medium text-[var(--foreground)]/80">Skills (Comma separated list)</label>
+                    <textarea value={skillItems} onChange={(e) => setSkillItems(e.target.value)} rows={4}
                       className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2.5 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm leading-relaxed"
-                      placeholder="e.g. HTML, CSS, JavaScript, TypeScript"
-                      required
-                    />
+                      placeholder="e.g. HTML, CSS, JavaScript, TypeScript" required />
                   </div>
                 </>
               )}
             </div>
 
-            {/* Sticky Action Footer */}
             <div className="px-6 py-4 border-t border-[var(--card-border)] bg-[var(--card-bg)] flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={closeModal}
-                className="bg-[var(--card-bg)] hover:bg-[var(--card-border)] border border-[var(--card-border)] px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors cursor-pointer text-[var(--foreground)]"
-              >
+              <button type="button" onClick={closeModal}
+                className="bg-[var(--card-bg)] hover:bg-[var(--card-border)] border border-[var(--card-border)] px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors cursor-pointer text-[var(--foreground)]">
                 Cancel
               </button>
-              <button
-                type="submit"
-                disabled={isSaving}
-                className="bg-[#FF7F50] hover:bg-[#ff6a35] text-white px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-50"
-              >
+              <button type="submit" disabled={isSaving}
+                className="bg-[#FF7F50] hover:bg-[#ff6a35] text-white px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-50">
                 {isSaving ? (
-                  <>
-                    <FaSpinner className="animate-spin" /> Saving...
-                  </>
+                  <><FaSpinner className="animate-spin" /> Saving...</>
                 ) : (
                   "Save Changes"
                 )}
