@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect, useRef, lazy, Suspense, Component } from "react";
 import { supabase } from "@/lib/supabase";
@@ -28,6 +28,9 @@ import {
   FaSearch,
   FaInbox,
   FaChevronLeft,
+  FaGripVertical,
+  FaSort,
+  FaCheckCircle,
 } from "react-icons/fa";
 
 import { detectWebGL } from "@/lib/webgl";
@@ -114,6 +117,13 @@ export default function AdminPage() {
   const [filterValue, setFilterValue] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 8;
+
+  // Reorder mode
+  const [isReorderMode, setIsReorderMode] = useState(false);
+  const [isSavingOrder, setIsSavingOrder] = useState(false);
+  const [dragSourceIndex, setDragSourceIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [reorderNotification, setReorderNotification] = useState<{ type: "success" | "error"; msg: string } | null>(null);
 
   // Data States
   const [projects, setProjects] = useState<any[]>([]);
@@ -222,10 +232,10 @@ export default function AdminPage() {
     setIsLoadingData(true);
     try {
       const [pRes, cRes, sRes, skRes, profRes] = await Promise.all([
-        supabase.from("projects").select("*").order("created_at", { ascending: false }),
-        supabase.from("certifications").select("*").order("created_at", { ascending: false }),
-        supabase.from("seminars").select("*").order("created_at", { ascending: false }),
-        supabase.from("skills").select("*").order("category", { ascending: true }),
+        supabase.from("projects").select("*").order("sort_order", { ascending: true, nullsFirst: false }),
+        supabase.from("certifications").select("*").order("sort_order", { ascending: true, nullsFirst: false }),
+        supabase.from("seminars").select("*").order("sort_order", { ascending: true, nullsFirst: false }),
+        supabase.from("skills").select("*").order("sort_order", { ascending: true, nullsFirst: false }),
         supabase.from("profile").select("*").maybeSingle(),
       ]);
 
@@ -505,6 +515,73 @@ export default function AdminPage() {
     setCurrentPage(1);
   }, [activeTab, searchQuery, filterValue]);
 
+  // Reset reorder mode when switching tabs
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useEffect(() => {
+    setIsReorderMode(false);
+    setDragSourceIndex(null);
+    setDragOverIndex(null);
+  }, [activeTab]);
+
+  // Drag-and-drop handlers
+  const handleDragStart = (index: number) => setDragSourceIndex(index);
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (dragOverIndex !== index) setDragOverIndex(index);
+  };
+
+  const handleDrop = (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    if (dragSourceIndex === null || dragSourceIndex === dropIndex) {
+      setDragSourceIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+    const reorder = (arr: any[]) => {
+      const next = [...arr];
+      const [moved] = next.splice(dragSourceIndex, 1);
+      next.splice(dropIndex, 0, moved);
+      return next;
+    };
+    if (activeTab === "projects") setProjects(reorder(projects));
+    else if (activeTab === "certifications") setCertifications(reorder(certifications));
+    else if (activeTab === "seminars") setSeminars(reorder(seminars));
+    else if (activeTab === "skills") setSkills(reorder(skills));
+    setDragSourceIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const handleDragEnd = () => {
+    setDragSourceIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const toggleReorderMode = async () => {
+    if (isReorderMode) {
+      setIsSavingOrder(true);
+      try {
+        const data =
+          activeTab === "projects" ? projects
+          : activeTab === "certifications" ? certifications
+          : activeTab === "seminars" ? seminars
+          : skills;
+        await Promise.all(
+          data.map((item, index) =>
+            supabase.from(activeTab).update({ sort_order: index + 1 }).eq("id", item.id)
+          )
+        );
+        setReorderNotification({ type: "success", msg: "Order saved successfully!" });
+      } catch (err: any) {
+        setReorderNotification({ type: "error", msg: "Failed to save order: " + (err.message || "Unknown error") });
+      } finally {
+        setIsSavingOrder(false);
+        setTimeout(() => setReorderNotification(null), 3500);
+      }
+    }
+    setIsReorderMode(prev => !prev);
+  };
+
   // Filtered + paginated data (computed each render)
   const getFilteredData = (): any[] => {
     const q = searchQuery.toLowerCase();
@@ -536,6 +613,14 @@ export default function AdminPage() {
   const filteredData = getFilteredData();
   const totalPages = Math.max(1, Math.ceil(filteredData.length / ITEMS_PER_PAGE));
   const paginatedData = filteredData.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
+  // In reorder mode, always show the full raw array so drag indices match state positions
+  const displayData = isReorderMode
+    ? (activeTab === "projects" ? projects
+       : activeTab === "certifications" ? certifications
+       : activeTab === "seminars" ? seminars
+       : skills)
+    : paginatedData;
 
   const emptyState = (
     <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
@@ -1161,7 +1246,8 @@ export default function AdminPage() {
                         placeholder="Search entries..."
                         value={searchQuery}
                         onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-                        className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2 pl-8 pr-3 text-sm text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] transition-colors placeholder:text-[var(--muted)]"
+                        disabled={isReorderMode}
+                        className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2 pl-8 pr-3 text-sm text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] transition-colors placeholder:text-[var(--muted)] disabled:opacity-40 disabled:cursor-not-allowed"
                       />
                     </div>
 
@@ -1170,7 +1256,8 @@ export default function AdminPage() {
                       <select
                         value={filterValue}
                         onChange={(e) => { setFilterValue(e.target.value); setCurrentPage(1); }}
-                        className="bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2 px-3 text-sm text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] cursor-pointer transition-colors"
+                        disabled={isReorderMode}
+                        className="bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2 px-3 text-sm text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         <option value="all">All Statuses</option>
                         <option value="completed">Completed</option>
@@ -1179,19 +1266,78 @@ export default function AdminPage() {
                       </select>
                     )}
 
-                    {/* Count + Add */}
-                    <div className="flex items-center gap-3 sm:ml-auto w-full sm:w-auto justify-between sm:justify-end">
+                    {/* Count + Reorder + Add */}
+                    <div className="flex items-center gap-2 sm:ml-auto w-full sm:w-auto justify-between sm:justify-end">
                       <span className="text-xs text-[var(--muted)] font-medium">
                         {filteredData.length} {filteredData.length === 1 ? "entry" : "entries"}
                       </span>
-                      <button
-                        onClick={() => openModal()}
-                        className="flex items-center gap-2 bg-[#FF7F50] hover:bg-[#ff6a35] text-white px-4 py-2 rounded-xl font-semibold text-sm transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-lg shadow-[#FF7F50]/20 whitespace-nowrap"
-                      >
-                        <FaPlus size={11} /> Add New Entry
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={toggleReorderMode}
+                          disabled={isSavingOrder}
+                          title={isReorderMode ? "Save order & exit reorder mode" : "Drag rows to reorder entries"}
+                          className={`flex items-center gap-2 px-4 py-2 rounded-xl font-semibold text-sm transition-all hover:scale-105 active:scale-95 cursor-pointer whitespace-nowrap disabled:opacity-60 ${
+                            isReorderMode
+                              ? "bg-[#FF7F50] text-white shadow-lg shadow-[#FF7F50]/20"
+                              : "border border-[var(--card-border)] bg-[var(--background)] text-[var(--muted)] hover:text-[var(--foreground)] hover:border-[#FF7F50]"
+                          }`}
+                        >
+                          {isSavingOrder ? (
+                            <FaSpinner className="animate-spin" size={11} />
+                          ) : isReorderMode ? (
+                            <FaCheckCircle size={11} />
+                          ) : (
+                            <FaSort size={11} />
+                          )}
+                          {isSavingOrder ? "Saving..." : isReorderMode ? "Save Order" : "Reorder"}
+                        </button>
+                        {!isReorderMode && (
+                          <button
+                            onClick={() => openModal()}
+                            className="flex items-center gap-2 bg-[#FF7F50] hover:bg-[#ff6a35] text-white px-4 py-2 rounded-xl font-semibold text-sm transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-lg shadow-[#FF7F50]/20 whitespace-nowrap"
+                          >
+                            <FaPlus size={11} /> Add New Entry
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
+
+                  {/* Reorder mode instruction banner */}
+                  {isReorderMode && (
+                    <div className="px-5 py-3 border-b border-[rgba(255,127,80,0.2)] bg-[rgba(255,127,80,0.07)] flex flex-col gap-2.5">
+                      <div className="flex items-center gap-2.5 text-xs text-[#FF7F50] font-semibold">
+                        <FaGripVertical className="flex-shrink-0" />
+                        <span>Drag the <strong>≡</strong> handle to reorder. Click <strong>Save Order</strong> to persist.</span>
+                      </div>
+                      <details className="text-xs text-[var(--muted)]">
+                        <summary className="cursor-pointer hover:text-[#FF7F50] transition-colors font-medium select-none list-none flex items-center gap-1.5">
+                          <span className="opacity-60">▶</span> First time? Run this SQL in your Supabase SQL Editor
+                        </summary>
+                        <pre className="mt-2 bg-black/60 text-emerald-400 p-3 rounded-xl text-[10px] font-mono leading-relaxed overflow-x-auto select-all whitespace-pre-wrap">{`ALTER TABLE public.projects       ADD COLUMN IF NOT EXISTS sort_order INTEGER;
+ALTER TABLE public.certifications ADD COLUMN IF NOT EXISTS sort_order INTEGER;
+ALTER TABLE public.seminars       ADD COLUMN IF NOT EXISTS sort_order INTEGER;
+ALTER TABLE public.skills         ADD COLUMN IF NOT EXISTS sort_order INTEGER;
+
+UPDATE public.projects p SET sort_order = sub.rn FROM (SELECT id, ROW_NUMBER() OVER (ORDER BY created_at DESC) AS rn FROM public.projects) sub WHERE p.id = sub.id;
+UPDATE public.certifications p SET sort_order = sub.rn FROM (SELECT id, ROW_NUMBER() OVER (ORDER BY created_at DESC) AS rn FROM public.certifications) sub WHERE p.id = sub.id;
+UPDATE public.seminars p SET sort_order = sub.rn FROM (SELECT id, ROW_NUMBER() OVER (ORDER BY created_at DESC) AS rn FROM public.seminars) sub WHERE p.id = sub.id;
+UPDATE public.skills p SET sort_order = sub.rn FROM (SELECT id, ROW_NUMBER() OVER (ORDER BY created_at ASC) AS rn FROM public.skills) sub WHERE p.id = sub.id;`}</pre>
+                      </details>
+                    </div>
+                  )}
+
+                  {/* Notification toast */}
+                  {reorderNotification && (
+                    <div className={`px-5 py-2.5 flex items-center gap-2 text-xs font-semibold border-b animate-fade-in ${
+                      reorderNotification.type === "success"
+                        ? "bg-emerald-950/40 border-emerald-500/30 text-emerald-300"
+                        : "bg-red-950/40 border-red-500/30 text-red-300"
+                    }`}>
+                      <FaCheckCircle size={12} />
+                      {reorderNotification.msg}
+                    </div>
+                  )}
 
                   {/* ── Projects Table ── */}
                   {activeTab === "projects" && (
@@ -1199,15 +1345,29 @@ export default function AdminPage() {
                       <table className="w-full border-collapse text-left">
                         <thead>
                           <tr className="border-b border-[var(--card-border)] bg-[var(--background)]/60 text-[10px] font-bold text-[var(--muted)] uppercase tracking-wider">
+                            {isReorderMode && <th className="pl-5 w-10 py-3.5"></th>}
                             <th className="px-6 py-3.5">Title</th>
                             <th className="px-6 py-3.5">Status</th>
                             <th className="px-6 py-3.5">Tech Stack</th>
-                            <th className="px-6 py-3.5 w-28 text-center">Actions</th>
+                            {!isReorderMode && <th className="px-6 py-3.5 w-28 text-center">Actions</th>}
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[var(--card-border)] text-sm">
-                          {paginatedData.map((proj) => (
-                            <tr key={proj.id} className="hover:bg-[var(--card-border)]/25 transition-colors duration-150">
+                          {displayData.map((proj, index) => (
+                            <tr
+                              key={proj.id}
+                              draggable={isReorderMode}
+                              onDragStart={isReorderMode ? () => handleDragStart(index) : undefined}
+                              onDragOver={isReorderMode ? (e) => handleDragOver(e, index) : undefined}
+                              onDrop={isReorderMode ? (e) => handleDrop(e, index) : undefined}
+                              onDragEnd={isReorderMode ? handleDragEnd : undefined}
+                              className={`transition-colors duration-150 ${isReorderMode ? (dragSourceIndex === index ? "opacity-40 bg-[var(--card-border)]/30" : dragOverIndex === index ? "bg-[rgba(255,127,80,0.12)] border-t-2 border-[#FF7F50]" : "hover:bg-[var(--card-border)]/20 cursor-grab") : "hover:bg-[var(--card-border)]/25"}`}
+                            >
+                              {isReorderMode && (
+                                <td className="pl-5 py-4 w-10">
+                                  <FaGripVertical className="text-[var(--muted)]/60 text-sm" />
+                                </td>
+                              )}
                               <td className="px-6 py-4 font-semibold text-[var(--foreground)] max-w-[200px]">
                                 <span className="block truncate">{proj.title}</span>
                               </td>
@@ -1228,16 +1388,18 @@ export default function AdminPage() {
                               <td className="px-6 py-4 text-[var(--muted)] max-w-[200px]">
                                 <span className="block truncate">{proj.tech?.slice(0, 3).join(", ")}{proj.tech?.length > 3 && " ..."}</span>
                               </td>
-                              <td className="px-6 py-4 w-28">
-                                <div className="flex items-center justify-center gap-3">
-                                  <button onClick={() => openModal(proj)} className="p-2 text-blue-400 hover:text-blue-300 hover:bg-blue-400/10 rounded-lg transition-all cursor-pointer" title="Edit"><FaEdit size={13} /></button>
-                                  <button onClick={() => handleDelete(proj.id)} className="p-2 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-lg transition-all cursor-pointer" title="Delete"><FaTrash size={13} /></button>
-                                </div>
-                              </td>
+                              {!isReorderMode && (
+                                <td className="px-6 py-4 w-28">
+                                  <div className="flex items-center justify-center gap-3">
+                                    <button onClick={() => openModal(proj)} className="p-2 text-blue-400 hover:text-blue-300 hover:bg-blue-400/10 rounded-lg transition-all cursor-pointer" title="Edit"><FaEdit size={13} /></button>
+                                    <button onClick={() => handleDelete(proj.id)} className="p-2 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-lg transition-all cursor-pointer" title="Delete"><FaTrash size={13} /></button>
+                                  </div>
+                                </td>
+                              )}
                             </tr>
                           ))}
-                          {paginatedData.length === 0 && (
-                            <tr><td colSpan={4}>{emptyState}</td></tr>
+                          {displayData.length === 0 && (
+                            <tr><td colSpan={isReorderMode ? 3 : 4}>{emptyState}</td></tr>
                           )}
                         </tbody>
                       </table>
@@ -1250,16 +1412,30 @@ export default function AdminPage() {
                       <table className="w-full border-collapse text-left">
                         <thead>
                           <tr className="border-b border-[var(--card-border)] bg-[var(--background)]/60 text-[10px] font-bold text-[var(--muted)] uppercase tracking-wider">
+                            {isReorderMode && <th className="pl-5 w-10 py-3.5"></th>}
                             <th className="px-6 py-3.5 w-20">Badge</th>
                             <th className="px-6 py-3.5">Name</th>
                             <th className="px-6 py-3.5">Issuer</th>
                             <th className="px-6 py-3.5">Date</th>
-                            <th className="px-6 py-3.5 w-28 text-center">Actions</th>
+                            {!isReorderMode && <th className="px-6 py-3.5 w-28 text-center">Actions</th>}
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[var(--card-border)] text-sm">
-                          {paginatedData.map((cert) => (
-                            <tr key={cert.id} className="hover:bg-[var(--card-border)]/25 transition-colors duration-150">
+                          {displayData.map((cert, index) => (
+                            <tr
+                              key={cert.id}
+                              draggable={isReorderMode}
+                              onDragStart={isReorderMode ? () => handleDragStart(index) : undefined}
+                              onDragOver={isReorderMode ? (e) => handleDragOver(e, index) : undefined}
+                              onDrop={isReorderMode ? (e) => handleDrop(e, index) : undefined}
+                              onDragEnd={isReorderMode ? handleDragEnd : undefined}
+                              className={`transition-colors duration-150 ${isReorderMode ? (dragSourceIndex === index ? "opacity-40 bg-[var(--card-border)]/30" : dragOverIndex === index ? "bg-[rgba(255,127,80,0.12)] border-t-2 border-[#FF7F50]" : "hover:bg-[var(--card-border)]/20 cursor-grab") : "hover:bg-[var(--card-border)]/25"}`}
+                            >
+                              {isReorderMode && (
+                                <td className="pl-5 py-4 w-10">
+                                  <FaGripVertical className="text-[var(--muted)]/60 text-sm" />
+                                </td>
+                              )}
                               <td className="px-6 py-4">
                                 {cert.badge_url ? (
                                   <img src={cert.badge_url} alt={cert.name} className="w-10 h-10 object-contain rounded-md border border-[var(--card-border)] p-0.5 bg-[var(--background)]" />
@@ -1272,16 +1448,18 @@ export default function AdminPage() {
                               </td>
                               <td className="px-6 py-4 text-[var(--muted)]">{cert.issuer}</td>
                               <td className="px-6 py-4 text-[var(--muted)] whitespace-nowrap">{cert.date}</td>
-                              <td className="px-6 py-4 w-28">
-                                <div className="flex items-center justify-center gap-3">
-                                  <button onClick={() => openModal(cert)} className="p-2 text-blue-400 hover:text-blue-300 hover:bg-blue-400/10 rounded-lg transition-all cursor-pointer" title="Edit"><FaEdit size={13} /></button>
-                                  <button onClick={() => handleDelete(cert.id)} className="p-2 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-lg transition-all cursor-pointer" title="Delete"><FaTrash size={13} /></button>
-                                </div>
-                              </td>
+                              {!isReorderMode && (
+                                <td className="px-6 py-4 w-28">
+                                  <div className="flex items-center justify-center gap-3">
+                                    <button onClick={() => openModal(cert)} className="p-2 text-blue-400 hover:text-blue-300 hover:bg-blue-400/10 rounded-lg transition-all cursor-pointer" title="Edit"><FaEdit size={13} /></button>
+                                    <button onClick={() => handleDelete(cert.id)} className="p-2 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-lg transition-all cursor-pointer" title="Delete"><FaTrash size={13} /></button>
+                                  </div>
+                                </td>
+                              )}
                             </tr>
                           ))}
-                          {paginatedData.length === 0 && (
-                            <tr><td colSpan={5}>{emptyState}</td></tr>
+                          {displayData.length === 0 && (
+                            <tr><td colSpan={isReorderMode ? 4 : 5}>{emptyState}</td></tr>
                           )}
                         </tbody>
                       </table>
@@ -1294,16 +1472,30 @@ export default function AdminPage() {
                       <table className="w-full border-collapse text-left">
                         <thead>
                           <tr className="border-b border-[var(--card-border)] bg-[var(--background)]/60 text-[10px] font-bold text-[var(--muted)] uppercase tracking-wider">
+                            {isReorderMode && <th className="pl-5 w-10 py-3.5"></th>}
                             <th className="px-6 py-3.5 w-24">Image</th>
                             <th className="px-6 py-3.5">Title</th>
                             <th className="px-6 py-3.5">Organizer</th>
                             <th className="px-6 py-3.5">Date</th>
-                            <th className="px-6 py-3.5 w-28 text-center">Actions</th>
+                            {!isReorderMode && <th className="px-6 py-3.5 w-28 text-center">Actions</th>}
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[var(--card-border)] text-sm">
-                          {paginatedData.map((sem) => (
-                            <tr key={sem.id} className="hover:bg-[var(--card-border)]/25 transition-colors duration-150">
+                          {displayData.map((sem, index) => (
+                            <tr
+                              key={sem.id}
+                              draggable={isReorderMode}
+                              onDragStart={isReorderMode ? () => handleDragStart(index) : undefined}
+                              onDragOver={isReorderMode ? (e) => handleDragOver(e, index) : undefined}
+                              onDrop={isReorderMode ? (e) => handleDrop(e, index) : undefined}
+                              onDragEnd={isReorderMode ? handleDragEnd : undefined}
+                              className={`transition-colors duration-150 ${isReorderMode ? (dragSourceIndex === index ? "opacity-40 bg-[var(--card-border)]/30" : dragOverIndex === index ? "bg-[rgba(255,127,80,0.12)] border-t-2 border-[#FF7F50]" : "hover:bg-[var(--card-border)]/20 cursor-grab") : "hover:bg-[var(--card-border)]/25"}`}
+                            >
+                              {isReorderMode && (
+                                <td className="pl-5 py-4 w-10">
+                                  <FaGripVertical className="text-[var(--muted)]/60 text-sm" />
+                                </td>
+                              )}
                               <td className="px-6 py-4">
                                 {sem.image_url ? (
                                   <img src={sem.image_url} alt={sem.title} className="w-16 h-10 object-cover rounded-md border border-[var(--card-border)]" />
@@ -1316,16 +1508,18 @@ export default function AdminPage() {
                               </td>
                               <td className="px-6 py-4 text-[var(--muted)]">{sem.organizer}</td>
                               <td className="px-6 py-4 text-[var(--muted)] whitespace-nowrap">{sem.date}</td>
-                              <td className="px-6 py-4 w-28">
-                                <div className="flex items-center justify-center gap-3">
-                                  <button onClick={() => openModal(sem)} className="p-2 text-blue-400 hover:text-blue-300 hover:bg-blue-400/10 rounded-lg transition-all cursor-pointer" title="Edit"><FaEdit size={13} /></button>
-                                  <button onClick={() => handleDelete(sem.id)} className="p-2 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-lg transition-all cursor-pointer" title="Delete"><FaTrash size={13} /></button>
-                                </div>
-                              </td>
+                              {!isReorderMode && (
+                                <td className="px-6 py-4 w-28">
+                                  <div className="flex items-center justify-center gap-3">
+                                    <button onClick={() => openModal(sem)} className="p-2 text-blue-400 hover:text-blue-300 hover:bg-blue-400/10 rounded-lg transition-all cursor-pointer" title="Edit"><FaEdit size={13} /></button>
+                                    <button onClick={() => handleDelete(sem.id)} className="p-2 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-lg transition-all cursor-pointer" title="Delete"><FaTrash size={13} /></button>
+                                  </div>
+                                </td>
+                              )}
                             </tr>
                           ))}
-                          {paginatedData.length === 0 && (
-                            <tr><td colSpan={5}>{emptyState}</td></tr>
+                          {displayData.length === 0 && (
+                            <tr><td colSpan={isReorderMode ? 4 : 5}>{emptyState}</td></tr>
                           )}
                         </tbody>
                       </table>
@@ -1338,14 +1532,28 @@ export default function AdminPage() {
                       <table className="w-full border-collapse text-left">
                         <thead>
                           <tr className="border-b border-[var(--card-border)] bg-[var(--background)]/60 text-[10px] font-bold text-[var(--muted)] uppercase tracking-wider">
+                            {isReorderMode && <th className="pl-5 w-10 py-3.5"></th>}
                             <th className="px-6 py-3.5">Category</th>
                             <th className="px-6 py-3.5">Skills</th>
-                            <th className="px-6 py-3.5 w-28 text-center">Actions</th>
+                            {!isReorderMode && <th className="px-6 py-3.5 w-28 text-center">Actions</th>}
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[var(--card-border)] text-sm">
-                          {paginatedData.map((sk) => (
-                            <tr key={sk.id} className="hover:bg-[var(--card-border)]/25 transition-colors duration-150">
+                          {displayData.map((sk, index) => (
+                            <tr
+                              key={sk.id}
+                              draggable={isReorderMode}
+                              onDragStart={isReorderMode ? () => handleDragStart(index) : undefined}
+                              onDragOver={isReorderMode ? (e) => handleDragOver(e, index) : undefined}
+                              onDrop={isReorderMode ? (e) => handleDrop(e, index) : undefined}
+                              onDragEnd={isReorderMode ? handleDragEnd : undefined}
+                              className={`transition-colors duration-150 ${isReorderMode ? (dragSourceIndex === index ? "opacity-40 bg-[var(--card-border)]/30" : dragOverIndex === index ? "bg-[rgba(255,127,80,0.12)] border-t-2 border-[#FF7F50]" : "hover:bg-[var(--card-border)]/20 cursor-grab") : "hover:bg-[var(--card-border)]/25"}`}
+                            >
+                              {isReorderMode && (
+                                <td className="pl-5 py-4 w-10">
+                                  <FaGripVertical className="text-[var(--muted)]/60 text-sm" />
+                                </td>
+                              )}
                               <td className="px-6 py-4 font-semibold text-[var(--foreground)] whitespace-nowrap">{sk.category}</td>
                               <td className="px-6 py-4">
                                 <div className="flex flex-wrap gap-1.5">
@@ -1357,16 +1565,18 @@ export default function AdminPage() {
                                   )}
                                 </div>
                               </td>
-                              <td className="px-6 py-4 w-28">
-                                <div className="flex items-center justify-center gap-3">
-                                  <button onClick={() => openModal(sk)} className="p-2 text-blue-400 hover:text-blue-300 hover:bg-blue-400/10 rounded-lg transition-all cursor-pointer" title="Edit"><FaEdit size={13} /></button>
-                                  <button onClick={() => handleDelete(sk.id)} className="p-2 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-lg transition-all cursor-pointer" title="Delete"><FaTrash size={13} /></button>
-                                </div>
-                              </td>
+                              {!isReorderMode && (
+                                <td className="px-6 py-4 w-28">
+                                  <div className="flex items-center justify-center gap-3">
+                                    <button onClick={() => openModal(sk)} className="p-2 text-blue-400 hover:text-blue-300 hover:bg-blue-400/10 rounded-lg transition-all cursor-pointer" title="Edit"><FaEdit size={13} /></button>
+                                    <button onClick={() => handleDelete(sk.id)} className="p-2 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-lg transition-all cursor-pointer" title="Delete"><FaTrash size={13} /></button>
+                                  </div>
+                                </td>
+                              )}
                             </tr>
                           ))}
-                          {paginatedData.length === 0 && (
-                            <tr><td colSpan={3}>{emptyState}</td></tr>
+                          {displayData.length === 0 && (
+                            <tr><td colSpan={isReorderMode ? 2 : 3}>{emptyState}</td></tr>
                           )}
                         </tbody>
                       </table>
@@ -1374,7 +1584,7 @@ export default function AdminPage() {
                   )}
 
                   {/* Pagination Footer */}
-                  {filteredData.length > ITEMS_PER_PAGE && (
+                  {filteredData.length > ITEMS_PER_PAGE && !isReorderMode && (
                     <div className="px-6 py-4 border-t border-[var(--card-border)] bg-[var(--background)]/30 flex flex-col sm:flex-row items-center justify-between gap-3">
                       <p className="text-xs text-[var(--muted)]">
                         Showing {Math.min((currentPage - 1) * ITEMS_PER_PAGE + 1, filteredData.length)}&ndash;{Math.min(currentPage * ITEMS_PER_PAGE, filteredData.length)} of {filteredData.length} entries

@@ -19,28 +19,28 @@ export default async function Page() {
   }
 
   try {
-    const { data } = await supabase.from("skills").select("*").order("category", { ascending: true });
+    const { data } = await supabase.from("skills").select("*").order("sort_order", { ascending: true, nullsFirst: false });
     skillsData = data;
   } catch (e) {
     console.warn("Supabase fetch skills failed on server:", e);
   }
 
   try {
-    const { data } = await supabase.from("projects").select("*").order("created_at", { ascending: false });
+    const { data } = await supabase.from("projects").select("*").order("sort_order", { ascending: true, nullsFirst: false });
     projectsData = data;
   } catch (e) {
     console.warn("Supabase fetch projects failed on server:", e);
   }
 
   try {
-    const { data } = await supabase.from("certifications").select("*").order("created_at", { ascending: false });
+    const { data } = await supabase.from("certifications").select("*").order("sort_order", { ascending: true, nullsFirst: false });
     certsData = data;
   } catch (e) {
     console.warn("Supabase fetch certifications failed on server:", e);
   }
 
   try {
-    const { data } = await supabase.from("seminars").select("*").order("created_at", { ascending: false });
+    const { data } = await supabase.from("seminars").select("*").order("sort_order", { ascending: true, nullsFirst: false });
     seminarsData = data;
   } catch (e) {
     console.warn("Supabase fetch seminars failed on server:", e);
