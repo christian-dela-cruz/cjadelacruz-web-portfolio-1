@@ -10,6 +10,8 @@ export default async function Page() {
   let projectsData = null;
   let certsData = null;
   let seminarsData = null;
+  let experienceData = null;
+  let educationData = null;
 
   try {
     const { data } = await supabase.from("profile").select("*").maybeSingle();
@@ -46,6 +48,20 @@ export default async function Page() {
     console.warn("Supabase fetch seminars failed on server:", e);
   }
 
+  try {
+    const { data } = await supabase.from("experience").select("*").order("sort_order", { ascending: true, nullsFirst: false });
+    experienceData = data;
+  } catch (e) {
+    console.warn("Supabase fetch experience failed on server:", e);
+  }
+
+  try {
+    const { data } = await supabase.from("education").select("*").order("sort_order", { ascending: true, nullsFirst: false });
+    educationData = data;
+  } catch (e) {
+    console.warn("Supabase fetch education failed on server:", e);
+  }
+
   return (
     <PortfolioClient
       databaseProfile={profileData}
@@ -53,6 +69,8 @@ export default async function Page() {
       databaseProjects={projectsData}
       databaseCertifications={certsData}
       databaseSeminars={seminarsData}
+      databaseExperience={experienceData}
+      databaseEducation={educationData}
     />
   );
 }

@@ -306,6 +306,44 @@ const initialSeminars = [
   },
 ];
 
+const initialExperience = [
+  {
+    title: "Freelance Mobile App Developer",
+    company: "EliteFitness",
+    duration: "Mar 2025 – Jun 2025",
+    hours: null,
+    bullets: [
+      "Developed a native Android fitness application using Xamarin.Android (C#) to help users manage and track their fitness journey.",
+      "Integrated Firebase for real-time data storage and synchronization of user profiles, workout logs, and progress metrics.",
+      "Designed and implemented a user-friendly interface for managing fitness schedules, tracking progress, and setting personal goals."
+    ],
+    tech: ["Xamarin.Android", "C#", "Firebase", "Android"]
+  },
+  {
+    title: "Software Developer",
+    company: "The Bellevue Manila",
+    duration: "April 2026 – July 2026",
+    hours: "486 Hours",
+    bullets: [
+      "Assisted in the development and maintenance of internal web-based systems used by hotel staff and management.",
+      "Collaborated with the IT department to troubleshoot software issues and implement minor feature enhancements.",
+      "Documented technical processes and supported data management tasks across hotel operations."
+    ],
+    tech: []
+  }
+];
+
+const initialEducation = [
+  {
+    degree: "Bachelor of Science in Information Technology",
+    specialization: "Cybersecurity Specialization",
+    school: "Mapúa Malayan Colleges Laguna",
+    duration: "2022 – Present",
+    description: "Currently enrolled. Gained strong fundamentals in cybersecurity, networking, software engineering, cloud infrastructure, and full-stack development. Active in hands-on projects including multi-hop mesh networking systems, mobile app development, and ethical hacking implementations.",
+    honors: "🏅 Dean's Lister: T1 & T3 (AY 2022–2023), T1 (AY 2024–2025)"
+  }
+];
+
 const contactInfo = [
   {
     icon: FaGithub,
@@ -347,6 +385,8 @@ interface PortfolioClientProps {
   databaseProjects: any;
   databaseCertifications: any;
   databaseSeminars: any;
+  databaseExperience: any;
+  databaseEducation: any;
 }
 
 export default function PortfolioClient({
@@ -354,7 +394,9 @@ export default function PortfolioClient({
   databaseSkills,
   databaseProjects,
   databaseCertifications,
-  databaseSeminars
+  databaseSeminars,
+  databaseExperience,
+  databaseEducation
 }: PortfolioClientProps) {
   const [shaderError, setShaderError] = useState(false);
   const [isWebGLSupported, setIsWebGLSupported] = useState(false);
@@ -430,6 +472,36 @@ export default function PortfolioClient({
       }));
     }
     return initialSeminars;
+  });
+
+  const [experience, setExperience] = useState<any[]>(() => {
+    if (databaseExperience && databaseExperience.length > 0) {
+      return databaseExperience.map((exp: any) => ({
+        id: exp.id,
+        title: exp.title,
+        company: exp.company,
+        duration: exp.duration,
+        hours: exp.hours,
+        bullets: exp.bullets || [],
+        tech: exp.tech || []
+      }));
+    }
+    return initialExperience;
+  });
+
+  const [education, setEducation] = useState<any[]>(() => {
+    if (databaseEducation && databaseEducation.length > 0) {
+      return databaseEducation.map((edu: any) => ({
+        id: edu.id,
+        degree: edu.degree,
+        specialization: edu.specialization,
+        school: edu.school,
+        duration: edu.duration,
+        description: edu.description,
+        honors: edu.honors
+      }));
+    }
+    return initialEducation;
   });
 
   const [profile, setProfile] = useState<any>(() => {
@@ -762,185 +834,112 @@ export default function PortfolioClient({
                     style={{ background: accentBorder }}
                   />
 
-                  {/* Entry 1: Freelance */}
-                  <div
-                    className="relative mb-5"
-                    onMouseEnter={() => setHoveredEntry("exp-0")}
-                    onMouseLeave={() => setHoveredEntry(null)}
-                  >
-                    {/* Dot */}
+                  {experience.map((exp, index) => (
                     <div
-                      className="absolute -left-7 top-3 w-3 h-3 rounded-full transition-all duration-300"
-                      style={{
-                        background: "var(--accent)",
-                        boxShadow: hoveredEntry === "exp-0"
-                          ? `0 0 0 5px ${accentBg}, 0 0 12px rgba(6,182,212,0.5)`
-                          : `0 0 0 3px ${accentBg}`,
-                        transform: hoveredEntry === "exp-0" ? "scale(1.35)" : "scale(1)",
-                      }}
-                    />
-                    <div
-                      className="rounded-xl p-5 transition-all duration-300 hover:-translate-y-1"
-                      style={{
-                        background: "rgba(6,182,212,0.04)",
-                        border: `1px solid ${accentBorder}`,
-                        boxShadow: "0 2px 12px rgba(0,0,0,0.15)",
-                      }}
-                      onMouseEnter={(e) => {
-                        (e.currentTarget as HTMLDivElement).style.borderColor = "var(--accent)";
-                        (e.currentTarget as HTMLDivElement).style.boxShadow = "0 6px 24px rgba(6,182,212,0.15)";
-                      }}
-                      onMouseLeave={(e) => {
-                        (e.currentTarget as HTMLDivElement).style.borderColor = accentBorder;
-                        (e.currentTarget as HTMLDivElement).style.boxShadow = "0 2px 12px rgba(0,0,0,0.15)";
-                      }}
+                      key={exp.id || index}
+                      className={`relative ${index < experience.length - 1 ? "mb-5" : ""}`}
+                      onMouseEnter={() => setHoveredEntry(`exp-${index}`)}
+                      onMouseLeave={() => setHoveredEntry(null)}
                     >
-                      <div className="flex flex-col gap-2 mb-4">
-                        <div className="flex flex-wrap items-start justify-between gap-2">
-                          <h4
-                            className="font-semibold text-sm"
-                            style={{ color: "var(--foreground)" }}
-                          >
-                            Freelance Mobile App Developer
-                          </h4>
-                          <span
-                            className="text-xs px-3 py-1 rounded-full"
-                            style={{
-                              background: accentBg,
-                              color: "var(--accent)",
-                              border: `1px solid ${accentBorder}`,
-                              whiteSpace: "nowrap",
-                            }}
-                          >
-                            Mar 2025 – Jun 2025
-                          </span>
-                        </div>
-                        <p className="text-sm" style={{ color: "var(--accent)" }}>
-                          EliteFitness
-                        </p>
-                      </div>
-
-                      <ul className="flex flex-col gap-2">
-                        {[
-                          "Developed a native Android fitness application using Xamarin.Android (C#) to help users manage and track their fitness journey.",
-                          "Integrated Firebase for real-time data storage and synchronization of user profiles, workout logs, and progress metrics.",
-                          "Designed and implemented a user-friendly interface for managing fitness schedules, tracking progress, and setting personal goals.",
-                        ].map((point, i) => (
-                          <li
-                            key={i}
-                            className="flex gap-2 text-sm"
-                            style={{ color: "var(--muted)" }}
-                          >
+                      {/* Dot */}
+                      <div
+                        className="absolute -left-7 top-3 w-3 h-3 rounded-full transition-all duration-300"
+                        style={{
+                          background: "var(--accent)",
+                          boxShadow: hoveredEntry === `exp-${index}`
+                            ? `0 0 0 5px ${accentBg}, 0 0 12px rgba(6,182,212,0.5)`
+                            : `0 0 0 3px ${accentBg}`,
+                          transform: hoveredEntry === `exp-${index}` ? "scale(1.35)" : "scale(1)",
+                        }}
+                      />
+                      <div
+                        className="rounded-xl p-5 transition-all duration-300 hover:-translate-y-1"
+                        style={{
+                          background: "rgba(6,182,212,0.04)",
+                          border: `1px solid ${accentBorder}`,
+                          boxShadow: "0 2px 12px rgba(0,0,0,0.15)",
+                        }}
+                        onMouseEnter={(e) => {
+                          (e.currentTarget as HTMLDivElement).style.borderColor = "var(--accent)";
+                          (e.currentTarget as HTMLDivElement).style.boxShadow = "0 6px 24px rgba(6,182,212,0.15)";
+                        }}
+                        onMouseLeave={(e) => {
+                          (e.currentTarget as HTMLDivElement).style.borderColor = accentBorder;
+                          (e.currentTarget as HTMLDivElement).style.boxShadow = "0 2px 12px rgba(0,0,0,0.15)";
+                        }}
+                      >
+                        <div className="flex flex-col gap-2 mb-4">
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <h4
+                              className="font-semibold text-sm"
+                              style={{ color: "var(--foreground)" }}
+                            >
+                              {exp.title}
+                            </h4>
                             <span
-                              className="mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0"
-                              style={{ background: "var(--accent)" }}
-                            />
-                            {point}
-                          </li>
-                        ))}
-                      </ul>
+                              className="text-xs px-3 py-1 rounded-full"
+                              style={{
+                                background: accentBg,
+                                color: "var(--accent)",
+                                border: `1px solid ${accentBorder}`,
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {exp.duration}
+                            </span>
+                          </div>
+                          <p className="text-sm" style={{ color: "var(--accent)" }}>
+                            {exp.company}
+                          </p>
+                          {exp.hours && (
+                            <p className="text-xs" style={{ color: "var(--muted)" }}>
+                              {exp.hours}
+                            </p>
+                          )}
+                        </div>
 
-                      {/* Tech stack badges */}
-                      <div className="flex flex-wrap gap-2 mt-4 pt-4" style={{ borderTop: "1px solid var(--card-border)" }}>
-                        {["Xamarin.Android", "C#", "Firebase", "Android"].map((tech) => (
-                          <span
-                            key={tech}
-                            className="text-xs px-2.5 py-1 rounded-lg"
-                            style={{
-                              background: accentBg,
-                              color: "var(--accent)",
-                              border: `1px solid ${accentBorder}`,
-                            }}
-                          >
-                            {tech}
-                          </span>
-                        ))}
+                        {exp.bullets && exp.bullets.length > 0 && (
+                          <ul className="flex flex-col gap-2">
+                            {exp.bullets.map((point: string, i: number) => (
+                              <li
+                                key={i}
+                                className="flex gap-2 text-sm"
+                                style={{ color: "var(--muted)" }}
+                              >
+                                <span
+                                  className="mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0"
+                                  style={{ background: "var(--accent)" }}
+                                />
+                                {point}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+
+                        {/* Tech stack badges */}
+                        {exp.tech && exp.tech.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-4 pt-4" style={{ borderTop: "1px solid var(--card-border)" }}>
+                            {exp.tech.map((techItem: string) => (
+                              <span
+                                key={techItem}
+                                className="text-xs px-2.5 py-1 rounded-lg"
+                                style={{
+                                  background: accentBg,
+                                  color: "var(--accent)",
+                                  border: `1px solid ${accentBorder}`,
+                                }}
+                              >
+                                {techItem}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
-                  </div>
-
-                  {/* Entry 2: OJT */}
-                  <div
-                    className="relative"
-                    onMouseEnter={() => setHoveredEntry("exp-1")}
-                    onMouseLeave={() => setHoveredEntry(null)}
-                  >
-                    {/* Dot */}
-                    <div
-                      className="absolute -left-7 top-3 w-3 h-3 rounded-full transition-all duration-300"
-                      style={{
-                        background: "var(--accent)",
-                        boxShadow: hoveredEntry === "exp-1"
-                          ? `0 0 0 5px ${accentBg}, 0 0 12px rgba(6,182,212,0.5)`
-                          : `0 0 0 3px ${accentBg}`,
-                        transform: hoveredEntry === "exp-1" ? "scale(1.35)" : "scale(1)",
-                      }}
-                    />
-                    <div
-                      className="rounded-xl p-5 transition-all duration-300 hover:-translate-y-1"
-                      style={{
-                        background: "rgba(6,182,212,0.04)",
-                        border: `1px solid ${accentBorder}`,
-                        boxShadow: "0 2px 12px rgba(0,0,0,0.15)",
-                      }}
-                      onMouseEnter={(e) => {
-                        (e.currentTarget as HTMLDivElement).style.borderColor = "var(--accent)";
-                        (e.currentTarget as HTMLDivElement).style.boxShadow = "0 6px 24px rgba(6,182,212,0.15)";
-                      }}
-                      onMouseLeave={(e) => {
-                        (e.currentTarget as HTMLDivElement).style.borderColor = accentBorder;
-                        (e.currentTarget as HTMLDivElement).style.boxShadow = "0 2px 12px rgba(0,0,0,0.15)";
-                      }}
-                    >
-                      <div className="flex flex-col gap-2 mb-4">
-                        <div className="flex flex-wrap items-start justify-between gap-2">
-                          <h4
-                            className="font-semibold text-sm"
-                            style={{ color: "var(--foreground)" }}
-                          >
-                            Software Developer
-                          </h4>
-                          <span
-                            className="text-xs px-3 py-1 rounded-full"
-                            style={{
-                              background: accentBg,
-                              color: "var(--accent)",
-                              border: `1px solid ${accentBorder}`,
-                              whiteSpace: "nowrap",
-                            }}
-                          >
-                            April 2026 – July 2026
-                          </span>
-                        </div>
-                        <p className="text-sm" style={{ color: "var(--accent)" }}>
-                          The Bellevue Manila
-                        </p>
-                        <p className="text-xs" style={{ color: "var(--muted)" }}>
-                          486 Hours
-                        </p>
-                      </div>
-
-                      <ul className="flex flex-col gap-2">
-                        {[
-                          "Assisted in the development and maintenance of internal web-based systems used by hotel staff and management.",
-                          "Collaborated with the IT department to troubleshoot software issues and implement minor feature enhancements.",
-                          "Documented technical processes and supported data management tasks across hotel operations.",
-                        ].map((point, i) => (
-                          <li
-                            key={i}
-                            className="flex gap-2 text-sm"
-                            style={{ color: "var(--muted)" }}
-                          >
-                            <span
-                              className="mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0"
-                              style={{ background: "var(--accent)" }}
-                            />
-                            {point}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
+                  ))}
+                  {experience.length === 0 && (
+                    <div className="text-[var(--muted)] text-sm italic py-4">No experience entries found.</div>
+                  )}
                 </div>
               </div>
 
@@ -969,75 +968,84 @@ export default function PortfolioClient({
       style={{ background: accentBorder }}
     />
 
-    {/* Entry: BSIT */}
-    <div
-      className="relative mb-5"
-      onMouseEnter={() => setHoveredEntry("edu-0")}
-      onMouseLeave={() => setHoveredEntry(null)}
-    >
-{/* Dot */}
-                    <div
-                      className="absolute -left-7 top-3 w-3 h-3 rounded-full transition-all duration-300"
-                      style={{
-                        background: "var(--accent)",
-                        boxShadow: hoveredEntry === "edu-0"
-                          ? `0 0 0 5px ${accentBg}, 0 0 12px rgba(6,182,212,0.5)`
-                          : `0 0 0 3px ${accentBg}`,
-                        transform: hoveredEntry === "edu-0" ? "scale(1.35)" : "scale(1)",
-                      }}
-                    />
-                    <div
-        className="rounded-xl p-5 transition-all duration-300 hover:-translate-y-1"
-        style={{
-          background: "rgba(6,182,212,0.04)",
-          border: `1px solid ${accentBorder}`,
-          boxShadow: "0 2px 12px rgba(0,0,0,0.15)",
-        }}
-        onMouseEnter={(e) => {
-          (e.currentTarget as HTMLDivElement).style.borderColor = "var(--accent)";
-          (e.currentTarget as HTMLDivElement).style.boxShadow = "0 6px 24px rgba(6,182,212,0.15)";
-        }}
-        onMouseLeave={(e) => {
-          (e.currentTarget as HTMLDivElement).style.borderColor = accentBorder;
-          (e.currentTarget as HTMLDivElement).style.boxShadow = "0 2px 12px rgba(0,0,0,0.15)";
-        }}
+    {education.map((edu, index) => (
+      <div
+        key={edu.id || index}
+        className={`relative ${index < education.length - 1 ? "mb-5" : ""}`}
+        onMouseEnter={() => setHoveredEntry(`edu-${index}`)}
+        onMouseLeave={() => setHoveredEntry(null)}
       >
-        <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
-          <div className="flex-1">
-            <h4
-              className="font-semibold text-sm mb-1"
-              style={{ color: "var(--foreground)" }}
+        {/* Dot */}
+        <div
+          className="absolute -left-7 top-3 w-3 h-3 rounded-full transition-all duration-300"
+          style={{
+            background: "var(--accent)",
+            boxShadow: hoveredEntry === `edu-${index}`
+              ? `0 0 0 5px ${accentBg}, 0 0 12px rgba(6,182,212,0.5)`
+              : `0 0 0 3px ${accentBg}`,
+            transform: hoveredEntry === `edu-${index}` ? "scale(1.35)" : "scale(1)",
+          }}
+        />
+        <div
+          className="rounded-xl p-5 transition-all duration-300 hover:-translate-y-1"
+          style={{
+            background: "rgba(6,182,212,0.04)",
+            border: `1px solid ${accentBorder}`,
+            boxShadow: "0 2px 12px rgba(0,0,0,0.15)",
+          }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLDivElement).style.borderColor = "var(--accent)";
+            (e.currentTarget as HTMLDivElement).style.boxShadow = "0 6px 24px rgba(6,182,212,0.15)";
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLDivElement).style.borderColor = accentBorder;
+            (e.currentTarget as HTMLDivElement).style.boxShadow = "0 2px 12px rgba(0,0,0,0.15)";
+          }}
+        >
+          <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
+            <div className="flex-1">
+              <h4
+                className="font-semibold text-sm mb-1"
+                style={{ color: "var(--foreground)" }}
+              >
+                {edu.degree}
+              </h4>
+              {edu.specialization && (
+                <p className="text-xs" style={{ color: "var(--foreground)" }}>
+                  {edu.specialization}
+                </p>
+              )}
+            </div>
+            <span
+              className="text-xs px-3 py-1 rounded-full whitespace-nowrap"
+              style={{
+                background: accentBg,
+                color: "var(--accent)",
+                border: `1px solid ${accentBorder}`,
+              }}
             >
-              Bachelor of Science in Information Technology
-            </h4>
-            <p className="text-xs" style={{ color: "var(--foreground)" }}>
-              Cybersecurity Specialization
-            </p>
+              {edu.duration}
+            </span>
           </div>
-          <span
-            className="text-xs px-3 py-1 rounded-full whitespace-nowrap"
-            style={{
-              background: accentBg,
-              color: "var(--accent)",
-              border: `1px solid ${accentBorder}`,
-            }}
-          >
-            2022 – Present
-          </span>
+
+          <p className="text-sm mb-3" style={{ color: "var(--accent)" }}>
+            {edu.school}
+          </p>
+
+          <p className="text-sm leading-relaxed" style={{ color: "var(--muted)" }}>
+            {edu.description}
+          </p>
+          {edu.honors && (
+            <p className="text-xs mt-3 font-medium" style={{ color: "var(--accent)" }}>
+              {edu.honors}
+            </p>
+          )}
         </div>
-
-        <p className="text-sm mb-3" style={{ color: "var(--accent)" }}>
-          Mapúa Malayan Colleges Laguna
-        </p>
-
-        <p className="text-sm leading-relaxed" style={{ color: "var(--muted)" }}>
-          Currently enrolled. Gained strong fundamentals in cybersecurity, networking, software engineering, cloud infrastructure, and full-stack development. Active in hands-on projects including multi-hop mesh networking systems, mobile app development, and ethical hacking implementations.
-        </p>
-        <p className="text-xs mt-3 font-medium" style={{ color: "var(--accent)" }}>
-          🏅 Dean&apos;s Lister: T1 &amp; T3 (AY 2022–2023), T1 (AY 2024–2025)
-        </p>
       </div>
-    </div>
+    ))}
+    {education.length === 0 && (
+      <div className="text-[var(--muted)] text-sm italic py-4">No education entries found.</div>
+    )}
   </div>
 </div>
             </div>

@@ -31,6 +31,8 @@ import {
   FaGripVertical,
   FaSort,
   FaCheckCircle,
+  FaBriefcase,
+  FaGraduationCap,
 } from "react-icons/fa";
 
 import { detectWebGL } from "@/lib/webgl";
@@ -62,7 +64,7 @@ class ShaderErrorBoundary extends Component<{ children: React.ReactNode }, { has
   }
 }
 
-type Tab = "projects" | "certifications" | "seminars" | "skills" | "profile";
+type Tab = "projects" | "certifications" | "seminars" | "skills" | "profile" | "experience" | "education";
 
 export default function AdminPage() {
   const [shaderError, setShaderError] = useState(false);
@@ -130,6 +132,8 @@ export default function AdminPage() {
   const [certifications, setCertifications] = useState<any[]>([]);
   const [seminars, setSeminars] = useState<any[]>([]);
   const [skills, setSkills] = useState<any[]>([]);
+  const [experience, setExperience] = useState<any[]>([]);
+  const [education, setEducation] = useState<any[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(false);
 
   // Profile Settings States
@@ -173,6 +177,22 @@ export default function AdminPage() {
   // -- Skill Fields
   const [skillCategory, setSkillCategory] = useState("");
   const [skillItems, setSkillItems] = useState("");
+
+  // -- Experience Fields
+  const [expTitle, setExpTitle] = useState("");
+  const [expCompany, setExpCompany] = useState("");
+  const [expDuration, setExpDuration] = useState("");
+  const [expHours, setExpHours] = useState("");
+  const [expBullets, setExpBullets] = useState("");
+  const [expTech, setExpTech] = useState("");
+
+  // -- Education Fields
+  const [eduDegree, setEduDegree] = useState("");
+  const [eduSpecialization, setEduSpecialization] = useState("");
+  const [eduSchool, setEduSchool] = useState("");
+  const [eduDuration, setEduDuration] = useState("");
+  const [eduDescription, setEduDescription] = useState("");
+  const [eduHonors, setEduHonors] = useState("");
 
   // Image Upload Ref & State
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -231,18 +251,22 @@ export default function AdminPage() {
   const fetchData = async () => {
     setIsLoadingData(true);
     try {
-      const [pRes, cRes, sRes, skRes, profRes] = await Promise.all([
+      const [pRes, cRes, sRes, skRes, profRes, expRes, eduRes] = await Promise.all([
         supabase.from("projects").select("*").order("sort_order", { ascending: true, nullsFirst: false }),
         supabase.from("certifications").select("*").order("sort_order", { ascending: true, nullsFirst: false }),
         supabase.from("seminars").select("*").order("sort_order", { ascending: true, nullsFirst: false }),
         supabase.from("skills").select("*").order("sort_order", { ascending: true, nullsFirst: false }),
         supabase.from("profile").select("*").maybeSingle(),
+        supabase.from("experience").select("*").order("sort_order", { ascending: true, nullsFirst: false }),
+        supabase.from("education").select("*").order("sort_order", { ascending: true, nullsFirst: false }),
       ]);
 
       if (pRes.data) setProjects(pRes.data);
       if (cRes.data) setCertifications(cRes.data);
       if (sRes.data) setSeminars(sRes.data);
       if (skRes.data) setSkills(skRes.data);
+      if (expRes.data) setExperience(expRes.data);
+      if (eduRes.data) setEducation(eduRes.data);
       
       if (profRes.data) {
         setProfName(profRes.data.name || "");
@@ -392,6 +416,20 @@ export default function AdminPage() {
     } else if (activeTab === "skills") {
       setSkillCategory(item?.category || "");
       setSkillItems(item?.items ? item.items.join(", ") : "");
+    } else if (activeTab === "experience") {
+      setExpTitle(item?.title || "");
+      setExpCompany(item?.company || "");
+      setExpDuration(item?.duration || "");
+      setExpHours(item?.hours || "");
+      setExpBullets(item?.bullets ? item.bullets.join("\n") : "");
+      setExpTech(item?.tech ? item.tech.join(", ") : "");
+    } else if (activeTab === "education") {
+      setEduDegree(item?.degree || "");
+      setEduSpecialization(item?.specialization || "");
+      setEduSchool(item?.school || "");
+      setEduDuration(item?.duration || "");
+      setEduDescription(item?.description || "");
+      setEduHonors(item?.honors || "");
     }
 
     setIsModalOpen(true);
@@ -454,6 +492,24 @@ export default function AdminPage() {
         data = {
           category: skillCategory,
           items: skillItems.split(",").map(i => i.trim()).filter(Boolean),
+        };
+      } else if (activeTab === "experience") {
+        data = {
+          title: expTitle,
+          company: expCompany,
+          duration: expDuration,
+          hours: expHours || null,
+          bullets: expBullets.split("\n").map(b => b.trim()).filter(Boolean),
+          tech: expTech.split(",").map(t => t.trim()).filter(Boolean),
+        };
+      } else if (activeTab === "education") {
+        data = {
+          degree: eduDegree,
+          specialization: eduSpecialization || null,
+          school: eduSchool,
+          duration: eduDuration,
+          description: eduDescription,
+          honors: eduHonors || null,
         };
       }
 
@@ -548,6 +604,8 @@ export default function AdminPage() {
     else if (activeTab === "certifications") setCertifications(reorder(certifications));
     else if (activeTab === "seminars") setSeminars(reorder(seminars));
     else if (activeTab === "skills") setSkills(reorder(skills));
+    else if (activeTab === "experience") setExperience(reorder(experience));
+    else if (activeTab === "education") setEducation(reorder(education));
     setDragSourceIndex(null);
     setDragOverIndex(null);
   };
@@ -565,7 +623,9 @@ export default function AdminPage() {
           activeTab === "projects" ? projects
           : activeTab === "certifications" ? certifications
           : activeTab === "seminars" ? seminars
-          : skills;
+          : activeTab === "skills" ? skills
+          : activeTab === "experience" ? experience
+          : education;
         await Promise.all(
           data.map((item, index) =>
             supabase.from(activeTab).update({ sort_order: index + 1 }).eq("id", item.id)
@@ -607,6 +667,16 @@ export default function AdminPage() {
         s.category?.toLowerCase().includes(q) || s.items?.join(" ").toLowerCase().includes(q)
       );
     }
+    if (activeTab === "experience") {
+      return experience.filter((e) =>
+        e.title?.toLowerCase().includes(q) || e.company?.toLowerCase().includes(q)
+      );
+    }
+    if (activeTab === "education") {
+      return education.filter((e) =>
+        e.degree?.toLowerCase().includes(q) || e.school?.toLowerCase().includes(q)
+      );
+    }
     return [];
   };
 
@@ -619,7 +689,9 @@ export default function AdminPage() {
     ? (activeTab === "projects" ? projects
        : activeTab === "certifications" ? certifications
        : activeTab === "seminars" ? seminars
-       : skills)
+       : activeTab === "skills" ? skills
+       : activeTab === "experience" ? experience
+       : education)
     : paginatedData;
 
   const emptyState = (
@@ -981,6 +1053,8 @@ export default function AdminPage() {
               [
                 { id: "profile", label: "Hero Settings", icon: FaUserCog },
                 { id: "projects", label: "Projects", icon: FaFolder },
+                { id: "experience", label: "Experience", icon: FaBriefcase },
+                { id: "education", label: "Education", icon: FaGraduationCap },
                 { id: "certifications", label: "Certifications", icon: FaCertificate },
                 { id: "seminars", label: "Seminars", icon: FaChalkboardTeacher },
                 { id: "skills", label: "Skills", icon: FaCode },
@@ -1063,15 +1137,17 @@ export default function AdminPage() {
 
         {/* Mobile Tab Navigation */}
         <nav className="md:hidden flex items-center gap-2 p-3 overflow-x-auto border-b border-[var(--card-border)] bg-[var(--card-bg)]/20 no-scrollbar flex-shrink-0">
-          {(
-            [
-              { id: "profile", label: "Hero", icon: FaUserCog },
-              { id: "projects", label: "Projects", icon: FaFolder },
-              { id: "certifications", label: "Certs", icon: FaCertificate },
-              { id: "seminars", label: "Seminars", icon: FaChalkboardTeacher },
-              { id: "skills", label: "Skills", icon: FaCode },
-            ] as const
-          ).map((tab) => {
+            {(
+              [
+                { id: "profile", label: "Hero", icon: FaUserCog },
+                { id: "projects", label: "Projects", icon: FaFolder },
+                { id: "experience", label: "Experience", icon: FaBriefcase },
+                { id: "education", label: "Education", icon: FaGraduationCap },
+                { id: "certifications", label: "Certs", icon: FaCertificate },
+                { id: "seminars", label: "Seminars", icon: FaChalkboardTeacher },
+                { id: "skills", label: "Skills", icon: FaCode },
+              ] as const
+            ).map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             return (
@@ -1095,6 +1171,8 @@ export default function AdminPage() {
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[var(--foreground)]">
               {activeTab === "profile" ? "Hero & Bio Settings" :
                activeTab === "projects" ? "Manage Projects" :
+               activeTab === "experience" ? "Manage Experience" :
+               activeTab === "education" ? "Manage Education" :
                activeTab === "certifications" ? "Manage Certifications" :
                activeTab === "seminars" ? "Manage Seminars" : "Manage Skills"}
             </h1>
@@ -1583,6 +1661,112 @@ UPDATE public.skills p SET sort_order = sub.rn FROM (SELECT id, ROW_NUMBER() OVE
                     </div>
                   )}
 
+                  {/* ── Experience Table ── */}
+                  {activeTab === "experience" && (
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse text-left">
+                        <thead>
+                          <tr className="border-b border-[var(--card-border)] bg-[var(--background)]/60 text-[10px] font-bold text-[var(--muted)] uppercase tracking-wider">
+                            {isReorderMode && <th className="pl-5 w-10 py-3.5"></th>}
+                            <th className="px-6 py-3.5">Title</th>
+                            <th className="px-6 py-3.5">Company</th>
+                            <th className="px-6 py-3.5">Duration</th>
+                            <th className="px-6 py-3.5">Hours</th>
+                            {!isReorderMode && <th className="px-6 py-3.5 w-28 text-center">Actions</th>}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[var(--card-border)] text-sm">
+                          {displayData.map((exp, index) => (
+                            <tr
+                              key={exp.id}
+                              draggable={isReorderMode}
+                              onDragStart={isReorderMode ? () => handleDragStart(index) : undefined}
+                              onDragOver={isReorderMode ? (e) => handleDragOver(e, index) : undefined}
+                              onDrop={isReorderMode ? (e) => handleDrop(e, index) : undefined}
+                              onDragEnd={isReorderMode ? handleDragEnd : undefined}
+                              className={`transition-colors duration-150 ${isReorderMode ? (dragSourceIndex === index ? "opacity-40 bg-[var(--card-border)]/30" : dragOverIndex === index ? "bg-[rgba(255,127,80,0.12)] border-t-2 border-[#FF7F50]" : "hover:bg-[var(--card-border)]/20 cursor-grab") : "hover:bg-[var(--card-border)]/25"}`}
+                            >
+                              {isReorderMode && (
+                                <td className="pl-5 py-4 w-10">
+                                  <FaGripVertical className="text-[var(--muted)]/60 text-sm" />
+                                </td>
+                              )}
+                              <td className="px-6 py-4 font-semibold text-[var(--foreground)] max-w-[200px]">
+                                <span className="block truncate">{exp.title}</span>
+                              </td>
+                              <td className="px-6 py-4 text-[var(--muted)]">{exp.company}</td>
+                              <td className="px-6 py-4 text-[var(--muted)] whitespace-nowrap">{exp.duration}</td>
+                              <td className="px-6 py-4 text-[var(--muted)]">{exp.hours || "—"}</td>
+                              {!isReorderMode && (
+                                <td className="px-6 py-4 w-28">
+                                  <div className="flex items-center justify-center gap-3">
+                                    <button onClick={() => openModal(exp)} className="p-2 text-blue-400 hover:text-blue-300 hover:bg-blue-400/10 rounded-lg transition-all cursor-pointer" title="Edit"><FaEdit size={13} /></button>
+                                    <button onClick={() => handleDelete(exp.id)} className="p-2 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-lg transition-all cursor-pointer" title="Delete"><FaTrash size={13} /></button>
+                                  </div>
+                                </td>
+                              )}
+                            </tr>
+                          ))}
+                          {displayData.length === 0 && (
+                            <tr><td colSpan={5}>{emptyState}</td></tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {/* ── Education Table ── */}
+                  {activeTab === "education" && (
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse text-left">
+                        <thead>
+                          <tr className="border-b border-[var(--card-border)] bg-[var(--background)]/60 text-[10px] font-bold text-[var(--muted)] uppercase tracking-wider">
+                            {isReorderMode && <th className="pl-5 w-10 py-3.5"></th>}
+                            <th className="px-6 py-3.5">Degree</th>
+                            <th className="px-6 py-3.5">School</th>
+                            <th className="px-6 py-3.5">Duration</th>
+                            {!isReorderMode && <th className="px-6 py-3.5 w-28 text-center">Actions</th>}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[var(--card-border)] text-sm">
+                          {displayData.map((edu, index) => (
+                            <tr
+                              key={edu.id}
+                              draggable={isReorderMode}
+                              onDragStart={isReorderMode ? () => handleDragStart(index) : undefined}
+                              onDragOver={isReorderMode ? (e) => handleDragOver(e, index) : undefined}
+                              onDrop={isReorderMode ? (e) => handleDrop(e, index) : undefined}
+                              onDragEnd={isReorderMode ? handleDragEnd : undefined}
+                              className={`transition-colors duration-150 ${isReorderMode ? (dragSourceIndex === index ? "opacity-40 bg-[var(--card-border)]/30" : dragOverIndex === index ? "bg-[rgba(255,127,80,0.12)] border-t-2 border-[#FF7F50]" : "hover:bg-[var(--card-border)]/20 cursor-grab") : "hover:bg-[var(--card-border)]/25"}`}
+                            >
+                              {isReorderMode && (
+                                <td className="pl-5 py-4 w-10">
+                                  <FaGripVertical className="text-[var(--muted)]/60 text-sm" />
+                                </td>
+                              )}
+                              <td className="px-6 py-4 font-semibold text-[var(--foreground)] max-w-[200px]">
+                                <span className="block truncate">{edu.degree}</span>
+                              </td>
+                              <td className="px-6 py-4 text-[var(--muted)]">{edu.school}</td>
+                              <td className="px-6 py-4 text-[var(--muted)] whitespace-nowrap">{edu.duration}</td>
+                              {!isReorderMode && (
+                                <td className="px-6 py-4 w-28">
+                                  <div className="flex items-center justify-center gap-3">
+                                    <button onClick={() => openModal(edu)} className="p-2 text-blue-400 hover:text-blue-300 hover:bg-blue-400/10 rounded-lg transition-all cursor-pointer" title="Edit"><FaEdit size={13} /></button>
+                                    <button onClick={() => handleDelete(edu.id)} className="p-2 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-lg transition-all cursor-pointer" title="Delete"><FaTrash size={13} /></button>
+                                  </div>
+                                </td>
+                              )}
+                            </tr>
+                          ))}
+                          {displayData.length === 0 && (
+                            <tr><td colSpan={4}>{emptyState}</td></tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
                   {/* Pagination Footer */}
                   {filteredData.length > ITEMS_PER_PAGE && !isReorderMode && (
                     <div className="px-6 py-4 border-t border-[var(--card-border)] bg-[var(--background)]/30 flex flex-col sm:flex-row items-center justify-between gap-3">
@@ -1845,6 +2029,98 @@ UPDATE public.skills p SET sort_order = sub.rn FROM (SELECT id, ROW_NUMBER() OVE
                     <textarea value={skillItems} onChange={(e) => setSkillItems(e.target.value)} rows={4}
                       className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2.5 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm leading-relaxed"
                       placeholder="e.g. HTML, CSS, JavaScript, TypeScript" required />
+                  </div>
+                </>
+              )}
+
+              {/* EXPERIENCE FORM */}
+              {activeTab === "experience" && (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-[var(--foreground)]/80">Job Title</label>
+                      <input type="text" value={expTitle} onChange={(e) => setExpTitle(e.target.value)}
+                        className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2.5 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm"
+                        placeholder="e.g. Mobile App Developer" required />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-[var(--foreground)]/80">Company / Organization</label>
+                      <input type="text" value={expCompany} onChange={(e) => setExpCompany(e.target.value)}
+                        className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2.5 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm"
+                        placeholder="e.g. EliteFitness" required />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-[var(--foreground)]/80">Duration / Period</label>
+                      <input type="text" value={expDuration} onChange={(e) => setExpDuration(e.target.value)}
+                        className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2.5 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm"
+                        placeholder="e.g. Mar 2025 – Jun 2025" required />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-[var(--foreground)]/80">Hours / Details (Optional)</label>
+                      <input type="text" value={expHours} onChange={(e) => setExpHours(e.target.value)}
+                        className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2.5 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm"
+                        placeholder="e.g. 486 Hours" />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-[var(--foreground)]/80">Achievements / Bullet Points (One per line)</label>
+                    <textarea value={expBullets} onChange={(e) => setExpBullets(e.target.value)} rows={4}
+                      className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2.5 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm leading-relaxed"
+                      placeholder={"Point 1\nPoint 2\nPoint 3"} />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-[var(--foreground)]/80">Technologies Used (Comma separated)</label>
+                    <input type="text" value={expTech} onChange={(e) => setExpTech(e.target.value)}
+                      className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2.5 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm"
+                      placeholder="Xamarin.Android, C#, Firebase" />
+                  </div>
+                </>
+              )}
+
+              {/* EDUCATION FORM */}
+              {activeTab === "education" && (
+                <>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-[var(--foreground)]/80">Degree / Qualification</label>
+                    <input type="text" value={eduDegree} onChange={(e) => setEduDegree(e.target.value)}
+                      className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2.5 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm"
+                      placeholder="e.g. Bachelor of Science in Information Technology" required />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-[var(--foreground)]/80">Specialization (Optional)</label>
+                      <input type="text" value={eduSpecialization} onChange={(e) => setEduSpecialization(e.target.value)}
+                        className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2.5 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm"
+                        placeholder="e.g. Cybersecurity Specialization" />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-[var(--foreground)]/80">School / Institution</label>
+                      <input type="text" value={eduSchool} onChange={(e) => setEduSchool(e.target.value)}
+                        className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2.5 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm"
+                        placeholder="e.g. Mapúa Malayan Colleges Laguna" required />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-[var(--foreground)]/80">Duration / Period</label>
+                      <input type="text" value={eduDuration} onChange={(e) => setEduDuration(e.target.value)}
+                        className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2.5 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm"
+                        placeholder="e.g. 2022 – Present" required />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-[var(--foreground)]/80">Honors / Awards (Optional)</label>
+                      <input type="text" value={eduHonors} onChange={(e) => setEduHonors(e.target.value)}
+                        className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2.5 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm"
+                        placeholder="e.g. Dean's Lister: T1 & T3" />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-[var(--foreground)]/80">Description / Details</label>
+                    <textarea value={eduDescription} onChange={(e) => setEduDescription(e.target.value)} rows={4}
+                      className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2.5 px-3 text-[var(--foreground)] focus:outline-none focus:border-[#FF7F50] text-sm leading-relaxed"
+                      placeholder="Provide a brief summary of coursework or achievements" required />
                   </div>
                 </>
               )}

@@ -125,3 +125,86 @@ VALUES (
 )
 ON CONFLICT (id) DO NOTHING;
 
+
+-- 6. Create Experience Table
+CREATE TABLE IF NOT EXISTS public.experience (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  title TEXT NOT NULL,
+  company TEXT NOT NULL,
+  duration TEXT NOT NULL,
+  hours TEXT,
+  bullets TEXT[] NOT NULL DEFAULT '{}'::TEXT[],
+  tech TEXT[] NOT NULL DEFAULT '{}'::TEXT[],
+  sort_order INT DEFAULT 0,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 7. Create Education Table
+CREATE TABLE IF NOT EXISTS public.education (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  degree TEXT NOT NULL,
+  specialization TEXT,
+  school TEXT NOT NULL,
+  duration TEXT NOT NULL,
+  description TEXT NOT NULL,
+  honors TEXT,
+  sort_order INT DEFAULT 0,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Enable Row Level Security (RLS) on new tables
+ALTER TABLE public.experience ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.education ENABLE ROW LEVEL SECURITY;
+
+-- Create Policies to allow public read-only access
+CREATE POLICY "Allow public read access on experience" ON public.experience FOR SELECT USING (true);
+CREATE POLICY "Allow public read access on education" ON public.education FOR SELECT USING (true);
+
+-- Create Policies to allow authenticated users (Admins) full access
+CREATE POLICY "Allow auth write access on experience" ON public.experience FOR ALL TO authenticated USING (true);
+CREATE POLICY "Allow auth write access on education" ON public.education FOR ALL TO authenticated USING (true);
+
+-- Seed Experience mock data
+INSERT INTO public.experience (title, company, duration, hours, bullets, tech, sort_order) VALUES
+(
+  'Freelance Mobile App Developer', 
+  'EliteFitness', 
+  'Mar 2025 – Jun 2025', 
+  NULL, 
+  ARRAY[
+    'Developed a native Android fitness application using Xamarin.Android (C#) to help users manage and track their fitness journey.',
+    'Integrated Firebase for real-time data storage and synchronization of user profiles, workout logs, and progress metrics.',
+    'Designed and implemented a user-friendly interface for managing fitness schedules, tracking progress, and setting personal goals.'
+  ], 
+  ARRAY['Xamarin.Android', 'C#', 'Firebase', 'Android'],
+  1
+),
+(
+  'Software Developer', 
+  'The Bellevue Manila', 
+  'April 2026 – July 2026', 
+  '486 Hours', 
+  ARRAY[
+    'Assisted in the development and maintenance of internal web-based systems used by hotel staff and management.',
+    'Collaborated with the IT department to troubleshoot software issues and implement minor feature enhancements.',
+    'Documented technical processes and supported data management tasks across hotel operations.'
+  ], 
+  ARRAY[]::TEXT[],
+  2
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- Seed Education mock data
+INSERT INTO public.education (degree, specialization, school, duration, description, honors, sort_order) VALUES
+(
+  'Bachelor of Science in Information Technology',
+  'Cybersecurity Specialization',
+  'Mapúa Malayan Colleges Laguna',
+  '2022 – Present',
+  'Currently enrolled. Gained strong fundamentals in cybersecurity, networking, software engineering, cloud infrastructure, and full-stack development. Active in hands-on projects including multi-hop mesh networking systems, mobile app development, and ethical hacking implementations.',
+  '🏅 Dean''s Lister: T1 & T3 (AY 2022–2023), T1 (AY 2024–2025)',
+  1
+)
+ON CONFLICT (id) DO NOTHING;
+
+
